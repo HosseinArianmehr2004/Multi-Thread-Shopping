@@ -1,9 +1,12 @@
 #include <stdio.h>
 
 int main() {
-    printf("Hello, World!\n");
-    for (int i; i<10; i++){
+    for (int i; i<20; i++){
         printf("Kosse Khare Hossein !");
     }
+    for (int i; i<5; i++){
+        printf("Kosse Khare Saeed !");
+    }
+    printf("Hello, World!\n");
     return 0;
 }
