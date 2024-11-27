@@ -55,3 +55,7 @@ int main() {
     pthread_create(&thread, NULL, myTurn, NULL);
     yourTurn();
 }
+
+int fuckSaeed(){
+    return 1;
+}

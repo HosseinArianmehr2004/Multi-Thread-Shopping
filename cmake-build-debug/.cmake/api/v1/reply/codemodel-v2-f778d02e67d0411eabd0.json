@@ -39,7 +39,7 @@
 				{
 					"directoryIndex" : 0,
 					"id" : "Multi_Thread_Shopping::@6890427a1f51a3e7e1df",
-					"jsonFile" : "target-Multi_Thread_Shopping-Debug-8d8c4cf684609e3f4237.json",
+					"jsonFile" : "target-Multi_Thread_Shopping-Debug-ead473d0d45766dc6ee2.json",
 					"name" : "Multi_Thread_Shopping",
 					"projectIndex" : 0
 				}
@@ -49,12 +49,12 @@
 	"kind" : "codemodel",
 	"paths" : 
 	{
-		"build" : "D:/Codes/UniversityCodes/5-OperatingSystem/Multi-Thread-Shopping/cmake-build-debug",
-		"source" : "D:/Codes/UniversityCodes/5-OperatingSystem/Multi-Thread-Shopping"
+		"build" : "C:/Users/HP/Downloads/Multi-Thread-Shopping/cmake-build-debug",
+		"source" : "C:/Users/HP/Downloads/Multi-Thread-Shopping"
 	},
 	"version" : 
 	{
 		"major" : 2,
-		"minor" : 3
+		"minor" : 4
 	}
 }
