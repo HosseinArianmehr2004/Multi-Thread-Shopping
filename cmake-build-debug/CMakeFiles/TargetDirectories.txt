@@ -1,0 +1,3 @@
+D:/Codes/UniversityCodes/5-OperatingSystem/Multi-Thread-Shopping/cmake-build-debug/CMakeFiles/Multi_Thread_Shopping.dir
+D:/Codes/UniversityCodes/5-OperatingSystem/Multi-Thread-Shopping/cmake-build-debug/CMakeFiles/edit_cache.dir
+D:/Codes/UniversityCodes/5-OperatingSystem/Multi-Thread-Shopping/cmake-build-debug/CMakeFiles/rebuild_cache.dir
