@@ -17,7 +17,8 @@ int main()
 
     FILE *file;
     file = fopen(file_path, "w");
-    if (file == NULL) {
+    if (file == NULL)
+    {
         perror("Error creating file");
         return EXIT_FAILURE;
     }
@@ -26,8 +27,7 @@ int main()
     printf("Orderlist0:\n");
 
     char input[50];
-    int i = 0;
-    while (i < 100)
+    for (int i = 0; i < 100; i++)
     {
         scanf("%49s", input);
 
@@ -35,7 +35,6 @@ int main()
             break;
 
         strcpy(order_list[i], input);
-        i++;
     }
 
     int threshold;
