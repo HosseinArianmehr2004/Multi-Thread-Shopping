@@ -1,61 +1,46 @@
-// #include <pthread.h>
-
-// void *computation(void *add);
-
-// int main() {
-
-//     pthread_t thread1;
-//     pthread_t thread2;
-
-//     long value1 = 1;
-//     long value2 = 2;
-
-//     pthread_create(&thread1, NULL, computation, (void *) &value1);
-//     pthread_create(&thread2, NULL, computation, (void *) &value2);
-
-//     pthread_join(thread1, NULL);
-//     pthread_join(thread2, NULL);
-
-//     return 0;
-// }
-
-// void *computation(void *add) {
-
-//     long sum = 0;
-//     long *add_num = (long *) (add);
-
-//     for (int i = 0; i < 1000000000; ++i)
-//         sum += *add_num;
-
-//     return NULL;
-// }
-
-//--------------------------------------------------
-
 #include <stdio.h>
-#include <pthread.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
-_Noreturn void *myTurn(void *arg) {
-    while (1) {
-        sleep(1);
-        printf("My Turn!\n");
+int main()
+{
+    char username[100]; // an array of chars is an string :/
+
+    printf("Username: ");
+    scanf("%99s", username);
+
+    char file_path[200];
+    strcpy(file_path, "Users/");
+    strcat(file_path, username);
+    strcat(file_path, ".log");
+
+    FILE *file;
+    file = fopen(file_path, "w");
+    if (file == NULL) {
+        perror("Error creating file");
+        return EXIT_FAILURE;
     }
-}
 
-_Noreturn void yourTurn() {
-    while (1) {
-        sleep(2);
-        printf("Your Turn!\n");
+    char order_list[100][50]; // Array with 100 rows of strings, each with length 50
+    printf("Orderlist0:\n");
+
+    char input[50];
+    int i = 0;
+    while (i < 100)
+    {
+        scanf("%49s", input);
+
+        if (strcmp(input, "done") == 0)
+            break;
+
+        strcpy(order_list[i], input);
+        i++;
     }
-}
 
-int main() {
-    pthread_t thread;
-    pthread_create(&thread, NULL, myTurn, NULL);
-    yourTurn();
-}
+    int threshold;
+    printf("Price threshold: ");
+    scanf("%d", &threshold);
 
-int fuckSaeed(){
-    return 1;
+    return 0;
 }
