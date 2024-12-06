@@ -9,6 +9,7 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 
+int main_pid;
 char username[100];       // an array of chars is an string :/
 char order_list[100][50]; // Array with 100 rows of strings, each with length 50
 
@@ -67,12 +68,12 @@ void *readFile(void *arg)
 
     // Read lines until fgets returns NULL (end of file)
     while (fgets(line, sizeof(line), file) != NULL)
-        printf("%s", line);
+        // printf("%s", line);
 
-    fclose(file);
+        fclose(file);
 }
 
-void processDirectory(const char *path)
+void process_directory(int pid, const char *path)
 {
     struct dirent *entry;
     DIR *dp = opendir(path);
@@ -94,16 +95,43 @@ void processDirectory(const char *path)
         if (entry->d_type == DT_REG) // Check if it's a regular file
         {
             pthread_t thread;
-            pthread_create(&thread, NULL, readFile, (void *)strdup(fullPath)); // Use strdup to pass the string
-            pthread_detach(thread);                                            // Detach the thread to avoid joining
+            pthread_create(&thread, NULL, readFile, (void *)strdup(fullPath));
+            char file_id[9] = create_file_id(entry->name);
+            printf("PID %d create thread for %sID TID: %lu \n", getpid(), entry->d_name, (unsigned long)thread);
+            pthread_detach(thread); // Detach the thread to avoid joining
         }
         else if (entry->d_type == DT_DIR)
         {
-            processDirectory(fullPath); // Recursively process subdirectories
+            if (fork() == 0)
+            {
+                printf("PID %d create child for %s PID: %d \n", main_pid, entry->d_name, getpid());
+                process_directory(getpid(), fullPath); // Recursively process subdirectories
+                exit(0);
+            }
         }
     }
 
+    while (wait(NULL) != -1 || errno != ECHILD)
+        ; // waits until all the children terminate
     closedir(dp);
+}
+
+void *order(void *arg)
+{
+    pthread_t thread_id = pthread_self(); // Get the thread ID
+    printf("PID %d create thread for Orders TID: %lu \n", main_pid, (unsigned long)thread_id);
+}
+
+void *score(void *arg)
+{
+    pthread_t thread_id = pthread_self(); // Get the thread ID
+    printf("PID %d create thread for Scores TID: %lu \n", main_pid, (unsigned long)thread_id);
+}
+
+void * final(void *arg)
+{
+    pthread_t thread_id = pthread_self(); // Get the thread ID
+    printf("PID %d create thread for Final TID: %lu \n", main_pid, (unsigned long)thread_id);
 }
 
 int main()
@@ -111,24 +139,38 @@ int main()
     // login();
     // get_order_list();
 
+    main_pid = getpid(); // the main process id
+    printf("%s create PID: %d\n", username, main_pid);
+
     int pid1 = fork();
     int pid2 = fork();
 
     if (pid1 == 0 && pid2 == 0)
     {
-        processDirectory("Dataset/Store1");
+        int pid = getpid();
+        printf("PID %d create child for Store1 PID: %d \n", main_pid, pid);
+        process_directory(pid, "Dataset/Store1");
     }
     else if (pid1 == 0 && pid2 != 0)
     {
-        processDirectory("Dataset/Store2");
+        // int pid = getpid();
+        // printf("PID %d create child for Store2 PID: %d \n", main_pid, pid);
+        // process_directory(pid, "Dataset/Store2");
     }
     else if (pid1 != 0 && pid2 == 0)
     {
-        processDirectory("Dataset/Store3");
+        // int pid = getpid();
+        // printf("PID %d create child for Store3 PID: %d \n", main_pid, pid);
+        // process_directory(pid, "Dataset/Store3");
     }
     else
     {
         // Parent process
+
+        // pthread_t orders_th, scores_th, final_th;
+        // pthread_create(&orders_th, NULL, order, NULL);
+        // pthread_create(&scores_th, NULL, score, NULL);
+        // pthread_create(&final_th, NULL, final, NULL);
 
         while (wait(NULL) != -1 || errno != ECHILD)
             ; // waits until all the children terminate
