@@ -69,14 +69,18 @@ void *readFile(void *arg)
     // Read lines until fgets returns NULL (end of file)
     while (fgets(line, sizeof(line), file) != NULL)
         // printf("%s", line);
+        ;
 
-        fclose(file);
+    fclose(file);
 }
 
 void process_directory(int pid, const char *path)
 {
     struct dirent *entry;
     DIR *dp = opendir(path);
+
+    pthread_t threads[100]; // Assume a maximum of 100 files
+    int thread_count = 0;
 
     if (dp == NULL)
     {
@@ -94,26 +98,36 @@ void process_directory(int pid, const char *path)
 
         if (entry->d_type == DT_REG) // Check if it's a regular file
         {
-            pthread_t thread;
-            pthread_create(&thread, NULL, readFile, (void *)strdup(fullPath));
-            char file_id[9] = create_file_id(entry->name);
-            printf("PID %d create thread for %sID TID: %lu \n", getpid(), entry->d_name, (unsigned long)thread);
-            pthread_detach(thread); // Detach the thread to avoid joining
+            if (pthread_create(&threads[thread_count], NULL, readFile, (void *)strdup(fullPath)) != 0)
+            {
+                perror("faild to create thread \n");
+                return;
+            }
+
+            printf("PID %d create thread for %sID TID: %lu \n", getpid(), entry->d_name, (unsigned long)threads[thread_count]);
+            thread_count++;
         }
         else if (entry->d_type == DT_DIR)
         {
             if (fork() == 0)
             {
                 printf("PID %d create child for %s PID: %d \n", main_pid, entry->d_name, getpid());
-                process_directory(getpid(), fullPath); // Recursively process subdirectories
+
+                // Recursively process subdirectories
+                process_directory(getpid(), fullPath);
+
+                for (int i = 0; i < thread_count; i++)
+                    pthread_join(threads[i], NULL);
+
                 exit(0);
             }
         }
     }
 
+    closedir(dp);
+
     while (wait(NULL) != -1 || errno != ECHILD)
         ; // waits until all the children terminate
-    closedir(dp);
 }
 
 void *order(void *arg)
