@@ -52,43 +52,10 @@ void get_order_list()
     scanf("%d", &threshold);
 }
 
-int countFilesInDirectory(const char *path)
+void *readFile(void *arg)
 {
-    struct dirent *entry;
-    DIR *dp = opendir(path);
-    int fileCount = 0;
+    char *filePath = (char *)arg;
 
-    if (dp == NULL)
-    {
-        perror("Error opening directory");
-        return 0;
-    }
-
-    while ((entry = readdir(dp)) != NULL)
-    {
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
-            continue;
-
-        char fullPath[1024];
-        snprintf(fullPath, sizeof(fullPath), "%s/%s", path, entry->d_name);
-
-        // Use stat to check if the entry is a directory
-        struct stat statbuf;
-        if (stat(fullPath, &statbuf) == 0)
-        {
-            if (S_ISDIR(statbuf.st_mode))
-                fileCount += countFilesInDirectory(fullPath);
-            else
-                fileCount++;
-        }
-    }
-
-    closedir(dp);
-    return fileCount;
-}
-
-void *readFile(const char *filePath)
-{
     FILE *file = fopen(filePath, "r");
     if (file == NULL)
     {
@@ -118,45 +85,21 @@ void processDirectory(const char *path)
 
     while ((entry = readdir(dp)) != NULL)
     {
-        // Skip the current and parent directory entries
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
 
         char fullPath[1024];
         snprintf(fullPath, sizeof(fullPath), "%s/%s", path, entry->d_name);
 
-        // Check if the entry is a directory
-        if (entry->d_type == DT_DIR)
+        if (entry->d_type == DT_REG) // Check if it's a regular file
         {
-            pid_t pid = fork();
-            if (pid == 0)
-            {
-                int num_files = countFilesInDirectory(fullPath);
-                pthread_t thread[num_files];
-
-                for (int i = 0; i < num_files; i++)
-                {
-                    pthread_create(&thread[i], NULL, (void *)readFile, fullPath);
-                    // printf("Thread %d has started\n", i);
-                }
-
-                for (int i = 0; i < num_files; i++)
-                {
-                    pthread_join(thread[i], NULL);
-                    // printf("Thread %d has finished execution\n", i);
-                }
-
-                // printf("numfiles in %s = %d\n", fullPath, num_files);
-                exit(0);
-            }
-            else if (pid > 0)
-            {
-                wait(NULL);
-            }
-            else
-            {
-                perror("Fork failed");
-            }
+            pthread_t thread;
+            pthread_create(&thread, NULL, readFile, (void *)strdup(fullPath)); // Use strdup to pass the string
+            pthread_detach(thread);                                            // Detach the thread to avoid joining
+        }
+        else if (entry->d_type == DT_DIR)
+        {
+            processDirectory(fullPath); // Recursively process subdirectories
         }
     }
 
