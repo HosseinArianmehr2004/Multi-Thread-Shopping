@@ -56,52 +56,45 @@ void get_order_list()
 void *read_file(void *arg)
 {
     char *filePath = (char *)arg;
-    char name[200];
+    char *name = malloc(200); // Allocate memory for name
     char line[256];
 
     FILE *file = fopen(filePath, "r");
     if (file == NULL)
     {
         perror("Error opening file");
-        return 0;
+        free(filePath); // Free the filePath memory
+        return NULL;    // Return NULL on error
     }
 
     // Read lines until we find the name
     while (fgets(line, sizeof(line), file))
     {
-        if (sscanf(line, "Name: %99[^\n]", name) == 1)
+        if (sscanf(line, "Name: %199[^\n]", name) == 1)
+        {
             break; // Successfully read the name
+        }
     }
-    // printf("%s \n", name);
-
-    // search name in the order list
-
-    // Read lines until fgets returns NULL (end of file)
-    // while (fgets(line, sizeof(line), file) != NULL)
-    // {
-    //     printf("%s", line);
-    // }
 
     fclose(file);
-
-    return (void *)name;
+    free(filePath);      // Free the filePath memory
+    return (void *)name; // Return the allocated name
 }
 
-int process_directory(int pid, const char *path)
+void create_thread(int pid, const char *path)
 {
     struct dirent *entry;
     DIR *dp = opendir(path);
 
-    char result[100][200]; // 100 rows of strings with length 200
-
-    pthread_t threads[100]; // Assume a maximum of 100 files
-    int thread_count = 0;
-
     if (dp == NULL)
     {
         perror("Error opening directory");
-        return 0;
+        return;
     }
+
+    pthread_t threads[100]; // Assume a maximum of 100 files
+    char *results[100];     // Array to hold results
+    int thread_count = 0;
 
     while ((entry = readdir(dp)) != NULL)
     {
@@ -111,33 +104,60 @@ int process_directory(int pid, const char *path)
         char fullPath[1024];
         snprintf(fullPath, sizeof(fullPath), "%s/%s", path, entry->d_name);
 
-        if (entry->d_type == DT_REG) // Check if it's a regular file
+        // Check if it's a regular file
+        if (entry->d_type == DT_REG)
         {
-            if (pthread_create(&threads[thread_count], NULL, read_file, (void *)strdup(fullPath)) != 0)
+            char *arg = strdup(fullPath); // Duplicate the fullPath
+            if (pthread_create(&threads[thread_count], NULL, read_file, (void *)arg) != 0)
             {
-                perror("faild to create thread \n");
-                return 0;
+                perror("Failed to create thread");
+                free(arg); // Free the duplicated path on error
+                closedir(dp);
+                return;
             }
-
-            // printf("PID %d create thread for %sID TID: %lu \n", getpid(), entry->d_name, (unsigned long)threads[thread_count]);
             thread_count++;
         }
-        else if (entry->d_type == DT_DIR)
+    }
+
+    for (int i = 0; i < thread_count; i++)
+    {
+        void *result;
+        pthread_join(threads[i], &result); // Correctly retrieve the result
+        if (result != NULL)
+        {
+            printf("Thread returned: %s\n", (char *)result);
+            free(result); // Free the memory allocated in read_file
+        }
+    }
+
+    closedir(dp);
+}
+void create_process(int pid, const char *path)
+{
+    struct dirent *entry;
+    DIR *dp = opendir(path);
+
+    if (dp == NULL)
+    {
+        perror("Error opening directory");
+        return;
+    }
+
+    while ((entry = readdir(dp)) != NULL)
+    {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        if (entry->d_type == DT_DIR)
         {
             if (fork() == 0)
             {
-                // printf("PID %d create child for %s PID: %d \n", main_pid, entry->d_name, getpid());
+                char fullPath[1024];
+                snprintf(fullPath, sizeof(fullPath), "%s/%s", path, entry->d_name);
 
-                // Recursively process subdirectories
-                int thread_count = process_directory(getpid(), fullPath);
-                printf("%d \n", thread_count);
+                // printf("PID %d create child for %s PID: %d \n", pid, entry->d_name, getpid());
 
-                for (int i = 0; i < thread_count; i++)
-                {
-                    pthread_join(threads[i], (void *)result[i]);
-                    printf("%d", *result[i]);
-                }
-
+                create_thread(pid, fullPath);
                 exit(0);
             }
         }
@@ -147,8 +167,6 @@ int process_directory(int pid, const char *path)
 
     while (wait(NULL) != -1 || errno != ECHILD)
         ; // waits until all the children terminate
-
-    return thread_count;
 }
 
 void *order(void *arg)
@@ -184,19 +202,19 @@ int main()
     {
         int pid = getpid();
         printf("PID %d create child for Store1 PID: %d \n", main_pid, pid);
-        process_directory(pid, "Dataset/Store1");
+        create_process(pid, "../Dataset/Store1");
     }
     else if (pid1 == 0 && pid2 != 0)
     {
         // int pid = getpid();
         // printf("PID %d create child for Store2 PID: %d \n", main_pid, pid);
-        // process_directory(pid, "Dataset/Store2");
+        // create_process(pid, "Dataset/Store2");
     }
     else if (pid1 != 0 && pid2 == 0)
     {
         // int pid = getpid();
         // printf("PID %d create child for Store3 PID: %d \n", main_pid, pid);
-        // process_directory(pid, "Dataset/Store3");
+        // create_process(pid, "Dataset/Store3");
     }
     else
     {
