@@ -11,47 +11,59 @@
 #include <sys/types.h>
 
 int main_pid;
-char username[100];       // an array of chars is an string :/
-char order_list[100][50]; // Array with 100 rows of strings, each with length 50
+char username[100]; // an array of chars is an string :/
+float score;
+float price_threshold;
+
+typedef struct
+{
+    char name[50];
+    int number;
+} order_list;
 
 void login()
 {
-    printf("Username: ");
+    // Get username
+    printf("Enter your username: ");
     scanf("%99s", username);
 
+    // Create user file
     char file_path[200];
     snprintf(file_path, sizeof(file_path), "Users/%s.txt", username);
-
-    FILE *file;
-    file = fopen(file_path, "w");
+    FILE *file = fopen(file_path, "w");
     if (file == NULL)
     {
         perror("Error creating file");
         // return EXIT_FAILURE;
     }
+
+    // Writing user information
     fprintf(file, "Username: %s\n", username);
-    fprintf(file, "Purchase Times: %d", 0);
+    fprintf(file, "Number of times purchased from the Store1: %d\n", 0);
+    fprintf(file, "Number of times purchased from the Store3: %d\n", 0);
+    fprintf(file, "Number of times purchased from the Store2: %d\n", 0);
     fclose(file);
 }
 
 void get_order_list()
 {
+    order_list item[100];
     printf("Orderlist0:\n");
-
-    char input[50];
-    for (int i = 0; i < 100; i++)
+    int i = 0;
+    while (1)
     {
-        scanf("%49s", input);
-
-        if (strcmp(input, "done") == 0)
-            break;
-
-        strcpy(order_list[i], input);
+        scanf("%49s %d", item[i].name, &item[i].number);
+        // if (strcmp(item[i].name, "\n") == 0)
+        // {
+        //     break;
+        // }
+        printf("name: %s, Number: %d\n", item[i].name, item[i].number);
+        i++;
     }
 
-    int threshold;
-    printf("Price threshold: ");
-    scanf("%d", &threshold);
+    // Get price threshold
+    printf("Enter your price threshold: ");
+    scanf("%f", &price_threshold);
 }
 
 void *read_file(void *arg)
@@ -186,6 +198,12 @@ void create_process(const char *path)
         ; // waits until all the children terminate
 }
 
+void get_score()
+{
+    printf("Enter your score for this purchase: ");
+    scanf("%f", &score);
+}
+
 void *order(void *arg)
 {
     pthread_t thread_id = pthread_self(); // Get the thread ID
@@ -246,6 +264,8 @@ int main()
         while (wait(NULL) != -1 || errno != ECHILD)
             ; // waits until all the children terminate
     }
+
+    // get_score();
 
     return 0;
 }
