@@ -11,59 +11,47 @@
 #include <sys/types.h>
 
 int main_pid;
-char username[100]; // an array of chars is an string :/
-float score;
-float price_threshold;
-
-typedef struct
-{
-    char name[50];
-    int number;
-} order_list;
+char username[100];       // an array of chars is an string :/
+char order_list[100][50]; // Array with 100 rows of strings, each with length 50
 
 void login()
 {
-    // Get username
-    printf("Enter your username: ");
+    printf("Username: ");
     scanf("%99s", username);
 
-    // Create user file
     char file_path[200];
     snprintf(file_path, sizeof(file_path), "Users/%s.txt", username);
-    FILE *file = fopen(file_path, "w");
+
+    FILE *file;
+    file = fopen(file_path, "w");
     if (file == NULL)
     {
         perror("Error creating file");
         // return EXIT_FAILURE;
     }
-
-    // Writing user information
     fprintf(file, "Username: %s\n", username);
-    fprintf(file, "Number of times purchased from the Store1: %d\n", 0);
-    fprintf(file, "Number of times purchased from the Store3: %d\n", 0);
-    fprintf(file, "Number of times purchased from the Store2: %d\n", 0);
+    fprintf(file, "Purchase Times: %d", 0);
     fclose(file);
 }
 
 void get_order_list()
 {
-    order_list item[100];
     printf("Orderlist0:\n");
-    int i = 0;
-    while (1)
+
+    char input[50];
+    for (int i = 0; i < 100; i++)
     {
-        scanf("%49s %d", item[i].name, &item[i].number);
-        // if (strcmp(item[i].name, "\n") == 0)
-        // {
-        //     break;
-        // }
-        printf("name: %s, Number: %d\n", item[i].name, item[i].number);
-        i++;
+        scanf("%49s", input);
+
+        if (strcmp(input, "done") == 0)
+            break;
+
+        strcpy(order_list[i], input);
     }
 
-    // Get price threshold
-    printf("Enter your price threshold: ");
-    scanf("%f", &price_threshold);
+    int threshold;
+    printf("Price threshold: ");
+    scanf("%d", &threshold);
 }
 
 void *read_file(void *arg)
@@ -103,9 +91,11 @@ void *read_file(void *arg)
     return (void *)name;
 }
 
-void create_thread(const char *path) // all threads created by a process
+void create_thread(const char *path, char *results[], int *results_count) // all threads created by a process
 {
     // this function do all the stuff that a process (the process which creates thread for files)
+    // do all the stuff that a process has to do
+    // there is no need to return anything to create_process function
 
     struct dirent *entry;
     DIR *dp = opendir(path);
@@ -118,7 +108,6 @@ void create_thread(const char *path) // all threads created by a process
 
     pthread_t threads[100];
     int thread_count = 0;
-    char *results[100]; // array of strings contains the threads return values
 
     while ((entry = readdir(dp)) != NULL)
     {
@@ -143,20 +132,18 @@ void create_thread(const char *path) // all threads created by a process
         }
     }
 
+    void *result;
     for (int i = 0; i < thread_count; i++)
     {
-        void *result;
-        pthread_join(threads[i], &result); // Correctly retrieve the result
+        pthread_join(threads[i], &result);
         if (result != NULL)
         {
             results[i] = (char *)result;
-            printf("PID %d Thread returned: %s\n", getpid(), results[i]);
-            free(result); // Free the memory allocated in read_file function
+            // printf("PID %d Thread returned: %s\n", getpid(), results[i]);
         }
     }
 
-    // do all the stuff that a process has to do
-    // there is no need to return anything to create_process function
+    *results_count = thread_count;
 
     closedir(dp);
 }
@@ -172,36 +159,99 @@ void create_process(const char *path)
         return;
     }
 
+    int pipe_fd[2]; // Pipe file descriptors
+
+    if (pipe(pipe_fd) == -1) // Create a pipe
+    {
+        perror("Pipe failed");
+        closedir(dp);
+        return;
+    }
+
     while ((entry = readdir(dp)) != NULL)
     {
+        // Skip current and parent directory entries
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
 
+        // Check if the entry is a directory
         if (entry->d_type == DT_DIR)
         {
-            if (fork() == 0)
+            pid_t pid = fork();
+            if (pid < 0) // Error in fork
             {
+                perror("Fork failed");
+                closedir(dp);
+                return;
+            }
+            if (pid == 0) // Child process
+            {
+                close(pipe_fd[0]); // Close the read end of the pipe
+
                 char fullPath[1024];
-                snprintf(fullPath, sizeof(fullPath), "%s/%s", path, entry->d_name);
+                if (snprintf(fullPath, sizeof(fullPath), "%s/%s", path, entry->d_name) >= 1024)
+                {
+                    fprintf(stderr, "Path too long: %s/%s\n", path, entry->d_name);
+                    exit(EXIT_FAILURE);
+                }
 
                 // printf("PID %d create child for %s PID: %d \n", getppid(), entry->d_name, getpid());
 
-                create_thread(fullPath);
+                char *results[100]; // array of strings contains the threads return values
+                int results_count;
+
+                create_thread(fullPath, results, &results_count);
+
+                for (int i = 0; i < results_count; i++)
+                {
+                    if (results[i] != NULL)
+                    {
+                        size_t length = strlen(results[i]);
+                        write(pipe_fd[1], &length, sizeof(size_t)); // Write the length first
+                        write(pipe_fd[1], results[i], length + 1);  // Write the string (including null terminator)
+                        free(results[i]);                           // Free the memory allocated in read_file function
+                    }
+                }
+
+                close(pipe_fd[1]); // Close the write end after writing
+                closedir(dp);
+
                 exit(0);
             }
         }
     }
 
+    close(pipe_fd[1]); // Close the write end of the pipe in the parent
+
+    char *shopping_cart[100];
+    int shopping_cart_count = 0;
+
+    size_t length;
+    while (read(pipe_fd[0], &length, sizeof(size_t)) > 0)
+    {
+        char *buffer = malloc(length + 1); // +1 for null terminator
+        if (buffer == NULL)
+        {
+            perror("Memory allocation failed");
+            break;
+        }
+        read(pipe_fd[0], buffer, length + 1); // Read the string including null terminator
+
+        shopping_cart[shopping_cart_count] = buffer;
+        shopping_cart_count++;
+
+        printf("Parent received: %s\n", buffer);
+    }
+
+    close(pipe_fd[0]); // Close the read end of the pipe
     closedir(dp);
 
-    while (wait(NULL) != -1 || errno != ECHILD)
-        ; // waits until all the children terminate
-}
+    for (int i; i < shopping_cart_count; i++)
+        free(shopping_cart[shopping_cart_count]); // Free the allocated memory
 
-void get_score()
-{
-    printf("Enter your score for this purchase: ");
-    scanf("%f", &score);
+    // Wait for all child processes to terminate
+    while (wait(NULL) != -1 || errno != ECHILD)
+        ;
 }
 
 void *order(void *arg)
@@ -264,8 +314,6 @@ int main()
         while (wait(NULL) != -1 || errno != ECHILD)
             ; // waits until all the children terminate
     }
-
-    // get_score();
 
     return 0;
 }
