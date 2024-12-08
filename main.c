@@ -5,6 +5,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdbool.h>
 #include <pthread.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -19,6 +20,16 @@ typedef struct
     char name[200];
     int number;
 } order_list;
+
+typedef struct
+{
+    char path[200];
+
+    char name[200];
+    float price;
+    float score;
+    int entity;
+} item_that_should_change;
 
 order_list item[100];
 
@@ -67,41 +78,61 @@ void get_order_list()
     printf("\n");
 }
 
+bool is_in_order_list(char *name)
+{
+    // Search name in the order list
+    int i = 0;
+    while (strcmp(item[i].name, "done") != 0)
+    {
+        if (strcmp(item[i].name, name) == 0)
+            return true;
+
+        i++;
+    }
+
+    return false;
+}
+
 void *read_file(void *arg)
 {
     char *filePath = (char *)arg;
-    char *name = malloc(200);
     char line[256];
+    item_that_should_change *item = malloc(sizeof(item_that_should_change));
+
+    if (item == NULL)
+    {
+        perror("Memory allocation failed");
+        free(filePath);
+        return NULL;
+    }
 
     FILE *file = fopen(filePath, "r");
     if (file == NULL)
     {
         perror("Error opening file");
         free(filePath);
+        free(item);
         return NULL;
     }
 
-    // Read lines until we find the name
-    while (fgets(line, sizeof(line), file))
-    {
-        if (sscanf(line, "Name: %199[^\n]", name) == 1)
-        {
-            break; // Successfully read the name
-        }
-    }
+    if (fgets(line, sizeof(line), file) != NULL)
+        sscanf(line, "Name: %199[^\n]", item->name);
 
-    // Search name in the order list
-    int i = 0;
-    while (strcmp(item[i].name, "done") != 0)
+    if (is_in_order_list(item->name))
     {
-        if (strcmp(item[i].name, name) == 0)
-        {
-            // printf("100\n");
-            fclose(file);
-            free(filePath);
-            return (void *)name; // Successfully find the name
-        }
-        i++;
+        if (fgets(line, sizeof(line), file) != NULL)
+            sscanf(line, "Price: %f", &item->price);
+
+        if (fgets(line, sizeof(line), file) != NULL)
+            sscanf(line, "Score: %f", &item->score);
+
+        if (fgets(line, sizeof(line), file) != NULL)
+            sscanf(line, "Entity: %d", &item->entity);
+
+        strcpy(item->path, filePath);
+        fclose(file);
+        free(filePath);
+        return (void *)item;
     }
 
     // Read lines until fgets returns NULL (end of file)
@@ -110,13 +141,13 @@ void *read_file(void *arg)
     //     printf("%s", line);
     // }
 
-    // The name not found
     fclose(file);
     free(filePath);
+    free(item);
     return NULL;
 }
 
-void create_thread(const char *path, char *results[], int *results_count)
+void create_thread(const char *path, item_that_should_change results[], int *results_count)
 {
     struct dirent *entry;
     DIR *dp = opendir(path);
@@ -161,9 +192,10 @@ void create_thread(const char *path, char *results[], int *results_count)
         pthread_join(threads[i], &result);
         if (result != NULL)
         {
-            results[*results_count] = (char *)result;
+            results[*results_count] = *(item_that_should_change *)result; // copy the struct
             (*results_count)++;
             // printf("PID %d Thread returned: %s \n", getpid(), results[*results_count - 1]);
+            free(result); // Free the memory allocated in read_file
         }
     }
 
@@ -219,25 +251,17 @@ void create_process(const char *path)
 
                 // printf("PID %d create child for %s PID: %d \n", getppid(), entry->d_name, getpid());
 
-                char *results[100]; // array of strings contains the threads return values
-                int results_count;
+                item_that_should_change results[100];
+                int results_count = 0;
 
                 create_thread(fullPath, results, &results_count);
 
                 for (int i = 0; i < results_count; i++)
-                {
-                    if (results[i] != NULL)
-                    {
-                        size_t length = strlen(results[i]);
-                        write(pipe_fd[1], &length, sizeof(size_t)); // Write the length first
-                        write(pipe_fd[1], results[i], length + 1);  // Write the string (including null terminator)
-                        free(results[i]);                           // Free the memory allocated in read_file function
-                    }
-                }
+                    if (results[i].name[0] != '\0')
+                        write(pipe_fd[1], &results[i], sizeof(item_that_should_change)); // Write the entire struct
 
                 close(pipe_fd[1]); // Close the write end after writing
                 closedir(dp);
-
                 exit(0);
             }
         }
@@ -245,36 +269,23 @@ void create_process(const char *path)
 
     close(pipe_fd[1]); // Close the write end of the pipe in the parent
 
-    char *shopping_cart[100];
+    item_that_should_change shopping_cart[100]; // Array to hold received structs
     int shopping_cart_count = 0;
 
-    size_t length;
-    while (read(pipe_fd[0], &length, sizeof(size_t)) > 0)
+    item_that_should_change buffer;
+    while (read(pipe_fd[0], &buffer, sizeof(item_that_should_change)) > 0)
     {
-        char *buffer = malloc(length + 1); // +1 for null terminator
-        if (buffer == NULL)
-        {
-            perror("Memory allocation failed");
-            break;
-        }
-        read(pipe_fd[0], buffer, length + 1); // Read the string including null terminator
-
         shopping_cart[shopping_cart_count] = buffer;
         shopping_cart_count++;
 
-        printf("Parent received: %s\n", buffer);
-        // the buffers deallocated in the for loop below
+        printf("Parent received: %s, Price: %.2f, Score: %.2f, Entity: %d\n", buffer.name, buffer.price, buffer.score, buffer.entity);
     }
 
     close(pipe_fd[0]); // Close the read end of the pipe
     closedir(dp);
 
-    for (int i; i < shopping_cart_count; i++)
-        free(shopping_cart[shopping_cart_count]); // Free the allocated memory
-
-    // Wait for all child processes to terminate
     while (wait(NULL) != -1 || errno != ECHILD)
-        ;
+        ; // Wait for all child processes to terminate
 }
 
 void *order(void *arg)
