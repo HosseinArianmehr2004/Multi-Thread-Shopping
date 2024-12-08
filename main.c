@@ -16,7 +16,7 @@ float price_threshold;
 
 typedef struct
 {
-    char name[50];
+    char name[200];
     int number;
 } order_list;
 
@@ -64,6 +64,7 @@ void get_order_list()
     // Get price threshold
     printf("Enter your price threshold: ");
     scanf("%f", &price_threshold);
+    printf("\n");
 }
 
 void *read_file(void *arg)
@@ -71,12 +72,13 @@ void *read_file(void *arg)
     char *filePath = (char *)arg;
     char *name = malloc(200);
     char line[256];
+
     FILE *file = fopen(filePath, "r");
     if (file == NULL)
     {
         perror("Error opening file");
         free(filePath);
-        return NULL; // Return NULL on error
+        return NULL;
     }
 
     // Read lines until we find the name
@@ -94,7 +96,7 @@ void *read_file(void *arg)
     {
         if (strcmp(item[i].name, name) == 0)
         {
-            printf("100\n");
+            // printf("100\n");
             fclose(file);
             free(filePath);
             return (void *)name; // Successfully find the name
@@ -111,15 +113,11 @@ void *read_file(void *arg)
     // The name not found
     fclose(file);
     free(filePath);
-    return (void *)NULL;
+    return NULL;
 }
 
-void create_thread(const char *path, char *results[], int *results_count) // all threads created by a process
+void create_thread(const char *path, char *results[], int *results_count)
 {
-    // this function do all the stuff that a process (the process which creates thread for files)
-    // do all the stuff that a process has to do
-    // there is no need to return anything to create_process function
-
     struct dirent *entry;
     DIR *dp = opendir(path);
 
@@ -131,6 +129,7 @@ void create_thread(const char *path, char *results[], int *results_count) // all
 
     pthread_t threads[100];
     int thread_count = 0;
+    *results_count = 0;
 
     while ((entry = readdir(dp)) != NULL)
     {
@@ -150,6 +149,7 @@ void create_thread(const char *path, char *results[], int *results_count) // all
                 return;
             }
 
+            // thread id for line below
             // printf("PID %d create thread for %sID TID: %lu \n", getpid(), entry->d_name, (unsigned long)threads[thread_count]);
             thread_count++;
         }
@@ -161,12 +161,11 @@ void create_thread(const char *path, char *results[], int *results_count) // all
         pthread_join(threads[i], &result);
         if (result != NULL)
         {
-            results[i] = (char *)result;
-            // printf("PID %d Thread returned: %s\n", getpid(), results[i]);
+            results[*results_count] = (char *)result;
+            (*results_count)++;
+            // printf("PID %d Thread returned: %s \n", getpid(), results[*results_count - 1]);
         }
     }
-
-    *results_count = thread_count;
 
     closedir(dp);
 }
@@ -264,6 +263,7 @@ void create_process(const char *path)
         shopping_cart_count++;
 
         printf("Parent received: %s\n", buffer);
+        // the buffers deallocated in the for loop below
     }
 
     close(pipe_fd[0]); // Close the read end of the pipe
@@ -311,7 +311,6 @@ int main()
         int pid = getpid();
         printf("PID %d create child for Store1 PID: %d \n", main_pid, pid);
         create_process("Dataset/Store1");
-        // create_process("temp_dataset/Store1");
     }
     else if (pid1 == 0 && pid2 != 0)
     {

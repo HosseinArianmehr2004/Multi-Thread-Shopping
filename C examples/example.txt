@@ -1,2 +1,0 @@
-Hello, World!
-This is an example of file creation in C.

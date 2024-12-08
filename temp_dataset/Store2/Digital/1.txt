@@ -1,6 +1,0 @@
-Name: Smartphone
-Price: 401.62
-Score: 3.1
-Entity: 57
-
-Last Modified: 2024-11-23 18:49:27
