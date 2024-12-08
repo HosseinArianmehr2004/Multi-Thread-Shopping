@@ -29,9 +29,9 @@ typedef struct
     float price;
     float score;
     int entity;
-} item_that_should_change;
+} item;
 
-order_list item[100];
+order_list order_list_items[100];
 
 void login()
 {
@@ -68,14 +68,14 @@ void get_order_list()
         input[strcspn(input, "\n")] = 0;
         if (strlen(input) == 0) // Input is empty
         {
-            strcpy(item[i].name, "done");
+            strcpy(order_list_items[i].name, "done");
             break;
         }
         else
         {
-            sscanf(input, "%49s %d", item[i].name, &item[i].number);
+            sscanf(input, "%49s %d", order_list_items[i].name, &order_list_items[i].number);
         }
-        printf("name: %s, Number: %d\n", item[i].name, item[i].number);
+        printf("name: %s, Number: %d\n", order_list_items[i].name, order_list_items[i].number);
         i++;
     }
 
@@ -97,9 +97,9 @@ bool is_in_order_list(char *name)
 {
     // Search name in the order list
     int i = 0;
-    while (strcmp(item[i].name, "done") != 0)
+    while (strcmp(order_list_items[i].name, "done") != 0)
     {
-        if (strcmp(item[i].name, name) == 0)
+        if (strcmp(order_list_items[i].name, name) == 0)
             return true;
 
         i++;
@@ -112,7 +112,7 @@ void *read_file(void *arg)
 {
     char *filePath = (char *)arg;
     char line[256];
-    item_that_should_change *item = malloc(sizeof(item_that_should_change));
+    item *item = malloc(sizeof(item));
 
     if (item == NULL)
     {
@@ -162,7 +162,7 @@ void *read_file(void *arg)
     return NULL;
 }
 
-void create_thread(const char *path, item_that_should_change results[], int *results_count)
+void create_thread(const char *path, item results[], int *results_count)
 {
     struct dirent *entry;
     DIR *dp = opendir(path);
@@ -196,7 +196,18 @@ void create_thread(const char *path, item_that_should_change results[], int *res
             }
 
             // thread id for line below
-            // printf("PID %d create thread for %sID TID: %lu \n", getpid(), entry->d_name, (unsigned long)threads[thread_count]);
+            char str[50];
+            char product_ID[50];
+            strncpy(str, entry->d_name, strlen(entry->d_name) - 4);
+            if (strlen(str) < 6)
+            {
+                snprintf(product_ID, sizeof(product_ID), "%0*d%s", 6 - strlen(str), 0, str);
+            }
+            else
+            {
+                strcpy(product_ID, str);
+            }
+            printf("PID %d create thread for %sID TID: %lu \n", getpid(), product_ID, (unsigned long)threads[thread_count]);
             thread_count++;
         }
     }
@@ -207,7 +218,7 @@ void create_thread(const char *path, item_that_should_change results[], int *res
         pthread_join(threads[i], &result);
         if (result != NULL)
         {
-            results[*results_count] = *(item_that_should_change *)result; // copy the struct
+            results[*results_count] = *(item *)result; // copy the struct
             (*results_count)++;
             // printf("PID %d Thread returned: %s \n", getpid(), results[*results_count - 1]);
             free(result); // Free the memory allocated in read_file
@@ -266,14 +277,14 @@ void create_process(const char *path)
 
                 // printf("PID %d create child for %s PID: %d \n", getppid(), entry->d_name, getpid());
 
-                item_that_should_change results[100];
+                item results[100];
                 int results_count = 0;
 
                 create_thread(fullPath, results, &results_count);
 
                 for (int i = 0; i < results_count; i++)
                     if (results[i].name[0] != '\0')
-                        write(pipe_fd[1], &results[i], sizeof(item_that_should_change)); // Write the entire struct
+                        write(pipe_fd[1], &results[i], sizeof(item)); // Write the entire struct
 
                 close(pipe_fd[1]); // Close the write end after writing
                 closedir(dp);
@@ -284,11 +295,11 @@ void create_process(const char *path)
 
     close(pipe_fd[1]); // Close the write end of the pipe in the parent
 
-    item_that_should_change shopping_cart[100]; // Array to hold received structs
+    item shopping_cart[100]; // Array to hold received structs
     int shopping_cart_count = 0;
 
-    item_that_should_change buffer;
-    while (read(pipe_fd[0], &buffer, sizeof(item_that_should_change)) > 0)
+    item buffer;
+    while (read(pipe_fd[0], &buffer, sizeof(item)) > 0)
     {
         shopping_cart[shopping_cart_count] = buffer;
         shopping_cart_count++;
