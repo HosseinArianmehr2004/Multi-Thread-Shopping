@@ -61,12 +61,19 @@ void get_order_list()
 {
     printf("Orderlist0:\n");
     int i = 0;
+    char input[100];
     while (1)
     {
-        scanf("%49s %d", item[i].name, &item[i].number);
-        if (strcmp(item[i].name, "done") == 0)
+        fgets(input, sizeof(input), stdin);
+        input[strcspn(input, "\n")] = 0;
+        if (strlen(input) == 0) // Input is empty
         {
+            strcpy(item[i].name, "done");
             break;
+        }
+        else
+        {
+            sscanf(input, "%49s %d", item[i].name, &item[i].number);
         }
         printf("name: %s, Number: %d\n", item[i].name, item[i].number);
         i++;
@@ -74,8 +81,16 @@ void get_order_list()
 
     // Get price threshold
     printf("Enter your price threshold: ");
-    scanf("%f", &price_threshold);
-    printf("\n");
+    fgets(input, sizeof(input), stdin);
+    input[strcspn(input, "\n")] = 0;
+    if (strlen(input) == 0)
+    {
+        price_threshold = -1; // Input is empty
+    }
+    else
+    {
+        sscanf(input, "%f", &price_threshold);
+    }
 }
 
 bool is_in_order_list(char *name)
