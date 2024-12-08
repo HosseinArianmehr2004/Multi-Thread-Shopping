@@ -11,47 +11,59 @@
 #include <sys/types.h>
 
 int main_pid;
-char username[100];       // an array of chars is an string :/
-char order_list[100][50]; // Array with 100 rows of strings, each with length 50
+char username[100]; // an array of chars is an string :/
+float price_threshold;
+
+typedef struct
+{
+    char name[50];
+    int number;
+} order_list;
+
+order_list item[100];
 
 void login()
 {
-    printf("Username: ");
+    // Get username
+    printf("Enter your username: ");
     scanf("%99s", username);
 
+    // Create user file
     char file_path[200];
     snprintf(file_path, sizeof(file_path), "Users/%s.txt", username);
-
-    FILE *file;
-    file = fopen(file_path, "w");
+    FILE *file = fopen(file_path, "w");
     if (file == NULL)
     {
         perror("Error creating file");
         // return EXIT_FAILURE;
     }
+
+    // Writing user information
     fprintf(file, "Username: %s\n", username);
-    fprintf(file, "Purchase Times: %d", 0);
+    fprintf(file, "Number of times purchased from the Store1: %d\n", 0);
+    fprintf(file, "Number of times purchased from the Store3: %d\n", 0);
+    fprintf(file, "Number of times purchased from the Store2: %d\n", 0);
     fclose(file);
 }
 
 void get_order_list()
 {
     printf("Orderlist0:\n");
-
-    char input[50];
-    for (int i = 0; i < 100; i++)
+    int i = 0;
+    while (1)
     {
-        scanf("%49s", input);
-
-        if (strcmp(input, "done") == 0)
+        scanf("%49s %d", item[i].name, &item[i].number);
+        if (strcmp(item[i].name, "done") == 0)
+        {
             break;
-
-        strcpy(order_list[i], input);
+        }
+        printf("name: %s, Number: %d\n", item[i].name, item[i].number);
+        i++;
     }
 
-    int threshold;
-    printf("Price threshold: ");
-    scanf("%d", &threshold);
+    // Get price threshold
+    printf("Enter your price threshold: ");
+    scanf("%f", &price_threshold);
 }
 
 void *read_file(void *arg)
@@ -59,7 +71,6 @@ void *read_file(void *arg)
     char *filePath = (char *)arg;
     char *name = malloc(200);
     char line[256];
-
     FILE *file = fopen(filePath, "r");
     if (file == NULL)
     {
@@ -77,7 +88,19 @@ void *read_file(void *arg)
         }
     }
 
-    // search name in the order list
+    // Search name in the order list
+    int i = 0;
+    while (strcmp(item[i].name, "done") != 0)
+    {
+        if (strcmp(item[i].name, name) == 0)
+        {
+            printf("100\n");
+            fclose(file);
+            free(filePath);
+            return (void *)name; // Successfully find the name
+        }
+        i++;
+    }
 
     // Read lines until fgets returns NULL (end of file)
     // while (fgets(line, sizeof(line), file) != NULL)
@@ -85,10 +108,10 @@ void *read_file(void *arg)
     //     printf("%s", line);
     // }
 
+    // The name not found
     fclose(file);
     free(filePath);
-
-    return (void *)name;
+    return (void *)NULL;
 }
 
 void create_thread(const char *path, char *results[], int *results_count) // all threads created by a process
@@ -275,7 +298,7 @@ void * final(void *arg)
 int main()
 {
     // login();
-    // get_order_list();
+    get_order_list();
 
     main_pid = getpid(); // the main process id
     printf("%s create PID: %d\n", username, main_pid);
@@ -287,8 +310,8 @@ int main()
     {
         int pid = getpid();
         printf("PID %d create child for Store1 PID: %d \n", main_pid, pid);
-        // create_process(pid, "Dataset/Store1");
-        create_process("temp_dataset/Store1");
+        create_process("Dataset/Store1");
+        // create_process("temp_dataset/Store1");
     }
     else if (pid1 == 0 && pid2 != 0)
     {
