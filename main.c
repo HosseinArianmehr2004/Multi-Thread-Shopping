@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <dirent.h>
+#include <float.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdbool.h>
@@ -68,7 +69,7 @@ void get_order_list()
         input[strcspn(input, "\n")] = 0;
         if (strlen(input) == 0) // Input is empty
         {
-            strcpy(order_list_items[i].name, "done");
+            strcpy(order_list_items[i].name, "\n");
             break;
         }
         else
@@ -85,7 +86,7 @@ void get_order_list()
     input[strcspn(input, "\n")] = 0;
     if (strlen(input) == 0)
     {
-        price_threshold = -1; // Input is empty
+        price_threshold = FLT_MAX; // Input is empty
     }
     else
     {
@@ -98,7 +99,7 @@ bool is_in_order_list(char *name)
 {
     // Search name in the order list
     int i = 0;
-    while (strcmp(order_list_items[i].name, "done") != 0)
+    while (strcmp(order_list_items[i].name, "\n") != 0)
     {
         if (strcmp(order_list_items[i].name, name) == 0)
             return true;
@@ -297,12 +298,22 @@ void create_process(const char *path, item shopping_cart[], int *shopping_cart_c
     close(pipe_fd[1]); // Close the write end of the pipe in the parent
 
     *shopping_cart_count = 0;
+    float price = 0.0;
     item buffer;
     while (read(pipe_fd[0], &buffer, sizeof(item)) > 0)
     {
-        shopping_cart[*shopping_cart_count] = buffer;
-        (*shopping_cart_count)++;
-        // printf("Parent received: %s, Price: %.2f, Score: %.2f, Entity: %d\n", buffer.name, buffer.price, buffer.score, buffer.entity);
+        price += buffer.price;
+        if (price > price_threshold)
+        {
+            price -= buffer.price;
+            continue;
+        }
+        else
+        {
+            shopping_cart[*shopping_cart_count] = buffer;
+            (*shopping_cart_count)++;
+            // printf("Parent received: %s, Price: %.2f, Score: %.2f, Entity: %d\n", buffer.name, buffer.price, buffer.score, buffer.entity);
+        }
     }
 
     close(pipe_fd[0]); // Close the read end of the pipe
