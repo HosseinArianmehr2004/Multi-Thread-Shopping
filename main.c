@@ -91,6 +91,7 @@ void get_order_list()
     {
         sscanf(input, "%f", &price_threshold);
     }
+    printf("\n");
 }
 
 bool is_in_order_list(char *name)
@@ -112,9 +113,9 @@ void *read_file(void *arg)
 {
     char *filePath = (char *)arg;
     char line[256];
-    item *item = malloc(sizeof(item));
+    item *local_item = malloc(sizeof(item));
 
-    if (item == NULL)
+    if (local_item == NULL)
     {
         perror("Memory allocation failed");
         free(filePath);
@@ -126,28 +127,28 @@ void *read_file(void *arg)
     {
         perror("Error opening file");
         free(filePath);
-        free(item);
+        free(local_item);
         return NULL;
     }
 
     if (fgets(line, sizeof(line), file) != NULL)
-        sscanf(line, "Name: %199[^\n]", item->name);
+        sscanf(line, "Name: %199[^\n]", local_item->name);
 
-    if (is_in_order_list(item->name))
+    if (is_in_order_list(local_item->name))
     {
         if (fgets(line, sizeof(line), file) != NULL)
-            sscanf(line, "Price: %f", &item->price);
+            sscanf(line, "Price: %f", &local_item->price);
 
         if (fgets(line, sizeof(line), file) != NULL)
-            sscanf(line, "Score: %f", &item->score);
+            sscanf(line, "Score: %f", &local_item->score);
 
         if (fgets(line, sizeof(line), file) != NULL)
-            sscanf(line, "Entity: %d", &item->entity);
+            sscanf(line, "Entity: %d", &local_item->entity);
 
-        strcpy(item->path, filePath);
+        strcpy(local_item->path, filePath);
         fclose(file);
         free(filePath);
-        return (void *)item;
+        return (void *)local_item;
     }
 
     // Read lines until fgets returns NULL (end of file)
@@ -158,7 +159,7 @@ void *read_file(void *arg)
 
     fclose(file);
     free(filePath);
-    free(item);
+    free(local_item);
     return NULL;
 }
 
@@ -207,7 +208,7 @@ void create_thread(const char *path, item results[], int *results_count)
             {
                 strcpy(product_ID, str);
             }
-            printf("PID %d create thread for %sID TID: %lu \n", getpid(), product_ID, (unsigned long)threads[thread_count]);
+            // printf("PID %d create thread for %sID TID: %lu \n", getpid(), product_ID, (unsigned long)threads[thread_count]);
             thread_count++;
         }
     }
@@ -228,7 +229,7 @@ void create_thread(const char *path, item results[], int *results_count)
     closedir(dp);
 }
 
-void create_process(const char *path)
+void create_process(const char *path, item shopping_cart[], int *shopping_cart_count)
 {
     struct dirent *entry;
     DIR *dp = opendir(path);
@@ -295,16 +296,13 @@ void create_process(const char *path)
 
     close(pipe_fd[1]); // Close the write end of the pipe in the parent
 
-    item shopping_cart[100]; // Array to hold received structs
-    int shopping_cart_count = 0;
-
+    *shopping_cart_count = 0;
     item buffer;
     while (read(pipe_fd[0], &buffer, sizeof(item)) > 0)
     {
-        shopping_cart[shopping_cart_count] = buffer;
-        shopping_cart_count++;
-
-        printf("Parent received: %s, Price: %.2f, Score: %.2f, Entity: %d\n", buffer.name, buffer.price, buffer.score, buffer.entity);
+        shopping_cart[*shopping_cart_count] = buffer;
+        (*shopping_cart_count)++;
+        // printf("Parent received: %s, Price: %.2f, Score: %.2f, Entity: %d\n", buffer.name, buffer.price, buffer.score, buffer.entity);
     }
 
     close(pipe_fd[0]); // Close the read end of the pipe
@@ -343,28 +341,41 @@ int main()
     int pid1 = fork();
     int pid2 = fork();
 
+    char store_path[200];
+    char store[10];
+
     if (pid1 == 0 && pid2 == 0)
     {
-        int pid = getpid();
-        printf("PID %d create child for Store1 PID: %d \n", main_pid, pid);
-        create_process("Dataset/Store1");
+        strcpy(store_path, "Dataset/Store1");
+        strcpy(store, "Store 1");
     }
     else if (pid1 == 0 && pid2 != 0)
     {
-        // int pid = getpid();
-        // printf("PID %d create child for Store2 PID: %d \n", main_pid, pid);
-        // create_process("Dataset/Store2");
+        strcpy(store_path, "Dataset/Store2");
+        strcpy(store, "Store 2");
     }
     else if (pid1 != 0 && pid2 == 0)
     {
-        // int pid = getpid();
-        // printf("PID %d create child for Store3 PID: %d \n", main_pid, pid);
-        // create_process("Dataset/Store3");
+        strcpy(store_path, "Dataset/Store3");
+        strcpy(store, "Store 3");
     }
-    else
-    {
-        // Parent process
 
+    if (pid1 == 0 || pid2 == 0) // All children processes
+    {
+        item shopping_cart[100];
+        int shopping_cart_count = 0;
+
+        printf("PID %d create child for %s PID: %d \n", main_pid, store, getpid());
+        create_process(store_path, shopping_cart, &shopping_cart_count);
+
+        printf("\n%s shop cart: \n", store);
+        for (int i = 0; i < shopping_cart_count; i++)
+        {
+            printf("%s: Price = %f, Score = %.2f, Entity = %d\n", shopping_cart[i].name, shopping_cart[i].price, shopping_cart[i].score, shopping_cart[i].entity);
+        }
+    }
+    else // Parent process
+    {
         // pthread_t orders_th, scores_th, final_th;
         // pthread_create(&orders_th, NULL, order, NULL);
         // pthread_create(&scores_th, NULL, score, NULL);
