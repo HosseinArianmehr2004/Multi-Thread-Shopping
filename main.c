@@ -330,16 +330,32 @@ void * final(void *arg)
     printf("PID %d create thread for Final TID: %lu \n", main_pid, (unsigned long)thread_id);
 }
 
+pthread_mutex_t print_mutex; // Mutex for controlling print access
+
 int main()
 {
+    pthread_mutex_init(&print_mutex, NULL); // Initialize the mutex
+
+    // age login ro az comment dar biarim kharab mishe
     // login();
     get_order_list();
 
-    main_pid = getpid(); // the main process id
+    pid_t main_pid = getpid();
     printf("%s create PID: %d\n", username, main_pid);
 
-    int pid1 = fork();
-    int pid2 = fork();
+    pid_t pid1 = fork();
+    if (pid1 < 0)
+    {
+        perror("Fork failed");
+        return 1;
+    }
+
+    pid_t pid2 = fork();
+    if (pid2 < 0)
+    {
+        perror("Fork failed");
+        return 1;
+    }
 
     char store_path[200];
     char store[10];
@@ -368,11 +384,16 @@ int main()
         printf("PID %d create child for %s PID: %d \n", main_pid, store, getpid());
         create_process(store_path, shopping_cart, &shopping_cart_count);
 
+        // useing mutexes maybe works incorrect
+        pthread_mutex_lock(&print_mutex); // Lock the mutex before printing
         printf("\n%s shop cart: \n", store);
         for (int i = 0; i < shopping_cart_count; i++)
         {
             printf("%s: Price = %f, Score = %.2f, Entity = %d\n", shopping_cart[i].name, shopping_cart[i].price, shopping_cart[i].score, shopping_cart[i].entity);
         }
+        pthread_mutex_unlock(&print_mutex); // Unlock the mutex after printing
+
+        exit(0);
     }
     else // Parent process
     {
@@ -385,5 +406,6 @@ int main()
             ; // waits until all the children terminate
     }
 
+    pthread_mutex_destroy(&print_mutex); // Destroy the mutex
     return 0;
 }
