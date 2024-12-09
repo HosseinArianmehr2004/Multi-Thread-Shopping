@@ -12,13 +12,9 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 
-int main_pid;
-char username[100]; // an array of chars is an string :/
-float price_threshold;
-
 typedef struct
 {
-    char name[200];
+    char name[50];
     int number;
 } order_list;
 
@@ -26,19 +22,23 @@ typedef struct
 {
     char path[200];
 
-    char name[200];
+    char name[50];
     float price;
     float score;
     int entity;
 } item;
 
+int main_pid;
+char username[100];
+float price_threshold;
 order_list order_list_items[100];
 
 void login()
 {
     // Get username
     printf("Enter your username: ");
-    scanf("%99s", username);
+    fgets(username, sizeof(username), stdin);
+    username[strcspn(username, "\n")] = 0;
 
     // Create user file
     char file_path[200];
@@ -65,6 +65,7 @@ void get_order_list()
     char input[100];
     while (1)
     {
+        // Get input (name & number of order list items)
         fgets(input, sizeof(input), stdin);
         input[strcspn(input, "\n")] = 0;
         if (strlen(input) == 0) // Input is empty
@@ -74,9 +75,15 @@ void get_order_list()
         }
         else
         {
-            sscanf(input, "%49s %d", order_list_items[i].name, &order_list_items[i].number);
+            char *last_space = strrchr(input, ' ');
+            if (last_space != NULL)
+            {
+                *last_space = '\0';
+                sscanf(last_space + 1, "%d", &order_list_items[i].number);                  // Extract number
+                strncpy(order_list_items[i].name, input, sizeof(order_list_items[i].name)); // Extract name
+            }
         }
-        printf("name: %s, Number: %d\n", order_list_items[i].name, order_list_items[i].number);
+        printf("name: %s, number: %d\n", order_list_items[i].name, order_list_items[i].number);
         i++;
     }
 
@@ -347,8 +354,7 @@ int main()
 {
     pthread_mutex_init(&print_mutex, NULL); // Initialize the mutex
 
-    // age login ro az comment dar biarim kharab mishe
-    // login();
+    login();
     get_order_list();
 
     pid_t main_pid = getpid();
@@ -391,6 +397,7 @@ int main()
     {
         item shopping_cart[100];
         int shopping_cart_count = 0;
+        float cart_price = 0.0;
 
         printf("PID %d create child for %s PID: %d \n", main_pid, store, getpid());
         create_process(store_path, shopping_cart, &shopping_cart_count);
@@ -400,8 +407,11 @@ int main()
         printf("\n%s shop cart: \n", store);
         for (int i = 0; i < shopping_cart_count; i++)
         {
-            printf("%s: Price = %f, Score = %.2f, Entity = %d\n", shopping_cart[i].name, shopping_cart[i].price, shopping_cart[i].score, shopping_cart[i].entity);
+            cart_price += shopping_cart[i].price;
+            printf("%s: Price = %f, Score = %.2f, Entity = %d\n",
+                   shopping_cart[i].name, shopping_cart[i].price, shopping_cart[i].score, shopping_cart[i].entity);
         }
+        printf("Total Price: %f \n", cart_price);
         pthread_mutex_unlock(&print_mutex); // Unlock the mutex after printing
 
         exit(0);
