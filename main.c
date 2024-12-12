@@ -352,11 +352,39 @@ void *order(void *arg)
     pthread_t thread_id = pthread_self();
     printf("PID %d create thread for Orders TID: %lu \n", getpid(), (unsigned long)thread_id);
 
-    // for (int i = 0; i < count; i++)
-    // {
-    //     printf("Store %c : %s: Price = %.2f, Score = %.1f, Entity = %d, Number = %d\n",
-    //            cart[i].store_number, cart[i].name, cart[i].price, cart[i].score, cart[i].entity, cart[i].number);
-    // }
+    // Calculate the value of the shopping cart
+    float shopping_cart_value[3] = {0.0, 0.0, 0.0};
+    for (int i = 0; i < count; i++)
+    {
+        if (cart[i].store_number == '1')
+        {
+            shopping_cart_value[0] += cart[i].score * cart[i].number / cart[i].price;
+        }
+        if (cart[i].store_number == '2')
+        {
+            shopping_cart_value[1] += cart[i].score * cart[i].number / cart[i].price;
+        }
+        if (cart[i].store_number == '3')
+        {
+            shopping_cart_value[2] += cart[i].score * cart[i].number / cart[i].price;
+        }
+    }
+    printf("Shopping cart value 1 : %.3f\n", shopping_cart_value[0]);
+    printf("Shopping cart value 2 : %.3f\n", shopping_cart_value[1]);
+    printf("Shopping cart value 3 : %.3f\n", shopping_cart_value[2]);
+
+    // Find max shopping cart value
+    char best_store[50];
+    float max = 0;
+    for (int i = 0; i < 3; i++)
+    {
+        if (shopping_cart_value[i] > max)
+        {
+            max = shopping_cart_value[i];
+            sprintf(best_store, "Max shopping cart value is %.3f for Store %d !\n", max, i + 1);
+        }
+    }
+    printf("%s", best_store);
 
     return NULL;
 }
