@@ -313,21 +313,32 @@ void create_process(const char *path, item shopping_cart[], int *shopping_cart_c
 
     *shopping_cart_count = 0;
     float price = 0.0;
+    int temp_number = 0;
+    int temp_entity = 0;
     item buffer;
     while (read(pipe_fd[0], &buffer, sizeof(item)) > 0)
     {
-        price += buffer.price;
-        if (price > price_threshold)
+        temp_number = 0;
+        temp_entity = buffer.entity;
+        for (int i = 0; i < buffer.number; i++)
         {
-            price -= buffer.price;
-            continue;
+            if (temp_number > temp_entity || temp_entity == 0)
+            {
+                break;
+            }
+            price += buffer.price;
+            if (price > price_threshold)
+            {
+                price -= buffer.price;
+                break;
+            }
+            temp_entity--; // in bayad tooye filesh ham doros beshe update beshe
+            temp_number++;
         }
-        else
-        {
-            shopping_cart[*shopping_cart_count] = buffer;
-            (*shopping_cart_count)++;
-            // printf("Parent received: %s, Price: %.2f, Score: %.2f, Entity: %d\n", buffer.name, buffer.price, buffer.score, buffer.entity);
-        }
+        buffer.number = temp_number;
+        shopping_cart[*shopping_cart_count] = buffer;
+        (*shopping_cart_count)++;
+        // printf("Parent received: %s, Price: %.2f, Score: %.2f, Entity: %d\n", buffer.name, buffer.price, buffer.score, buffer.entity);
     }
 
     close(pipe_fd[0]); // Close the read end of the pipe
@@ -515,12 +526,12 @@ int main()
         }
         close(pipe_fd[0]); // Close read end
 
-        // for (int i = 0; i < all.count; i++)
-        // {
-        //     printf("Store %c : %s: Price = %.2f, Score = %.1f, Entity = %d, Number = %d\n",
-        //            all.cart[i].store_number, all.cart[i].name, all.cart[i].price,
-        //            all.cart[i].score, all.cart[i].entity, all.cart[i].number);
-        // }
+        for (int i = 0; i < all.count; i++)
+        {
+            printf("Store %c, %s: Price = %.2f, Score = %.1f, Entity = %d, Number = %d\n",
+                   all.cart[i].store_number, all.cart[i].name, all.cart[i].price,
+                   all.cart[i].score, all.cart[i].entity, all.cart[i].number);
+        }
 
         pthread_t orders_th, scores_th, final_th;
         pthread_create(&orders_th, NULL, order, (void *)&all);
