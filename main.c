@@ -408,10 +408,10 @@ int main()
         for (int i = 0; i < shopping_cart_count; i++)
         {
             cart_price += shopping_cart[i].price;
-            printf("%s: Price = %f, Score = %.2f, Entity = %d\n",
+            printf("%s: Price = %.2f, Score = %.2f, Entity = %d\n",
                    shopping_cart[i].name, shopping_cart[i].price, shopping_cart[i].score, shopping_cart[i].entity);
         }
-        printf("Total Price: %f \n", cart_price);
+        printf("Total Price: %.2f \n", cart_price);
         pthread_mutex_unlock(&print_mutex); // Unlock the mutex after printing
 
         exit(0);
