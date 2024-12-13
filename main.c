@@ -31,9 +31,21 @@ typedef struct
     int entity;
 } item;
 
+typedef struct
+{
+    item cart[300];
+    int count;
+} shop_cart;
+
 pid_t main_pid;
-char username[100];
+pthread_mutex_t mutex;
+
+int results_count = 0;
 float price_threshold;
+char username[100];
+char chosen_store[2];
+
+item results[100];
 order_list order_list_items[100];
 
 void login()
@@ -125,8 +137,8 @@ bool is_in_order_list(item *checking_item)
 void *read_file(void *arg)
 {
     char *file_path = (char *)arg;
-    char line[256];
     item *local_item = malloc(sizeof(item));
+    char line[256];
 
     if (local_item == NULL)
     {
@@ -159,11 +171,12 @@ void *read_file(void *arg)
             sscanf(line, "Entity: %d", &local_item->entity);
 
         sscanf(file_path, "Dataset/Store%c/", &local_item->store_number);
-
         strcpy(local_item->path, file_path);
-        fclose(file);
-        free(file_path);
-        return (void *)local_item;
+
+        pthread_mutex_lock(&mutex);
+        results[results_count] = *local_item;
+        results_count++;
+        pthread_mutex_unlock(&mutex);
     }
 
     // Read lines until fgets returns NULL (end of file)
@@ -178,7 +191,7 @@ void *read_file(void *arg)
     return NULL;
 }
 
-void create_thread(const char *path, item results[], int *results_count)
+void create_thread(const char *path)
 {
     struct dirent *entry;
     DIR *dp = opendir(path);
@@ -191,7 +204,6 @@ void create_thread(const char *path, item results[], int *results_count)
 
     pthread_t threads[100];
     int thread_count = 0;
-    *results_count = 0;
 
     while ((entry = readdir(dp)) != NULL)
     {
@@ -223,22 +235,16 @@ void create_thread(const char *path, item results[], int *results_count)
             {
                 strcpy(product_ID, str);
             }
+
             // printf("PID %d create thread for %sID TID: %lu \n", getpid(), product_ID, (unsigned long)threads[thread_count]);
+
             thread_count++;
         }
     }
 
-    void *result;
     for (int i = 0; i < thread_count; i++)
     {
-        pthread_join(threads[i], &result);
-        if (result != NULL)
-        {
-            results[*results_count] = *(item *)result; // copy the struct
-            (*results_count)++;
-            // printf("PID %d Thread returned: %s \n", getpid(), results[*results_count - 1]);
-            free(result); // Free the memory allocated in read_file
-        }
+        pthread_join(threads[i], NULL);
     }
 
     closedir(dp);
@@ -274,6 +280,7 @@ void create_process(const char *path, item shopping_cart[], int *shopping_cart_c
         if (entry->d_type == DT_DIR)
         {
             pid_t pid = fork();
+
             if (pid < 0) // Error in fork
             {
                 perror("Fork failed");
@@ -282,7 +289,7 @@ void create_process(const char *path, item shopping_cart[], int *shopping_cart_c
             }
             if (pid == 0) // Child process
             {
-                close(pipe_fd[0]); // Close the read end of the pipe
+                // printf("PID %d create child for %s PID: %d \n", getppid(), entry->d_name, getpid());
 
                 char fullPath[1024];
                 if (snprintf(fullPath, sizeof(fullPath), "%s/%s", path, entry->d_name) >= 1024)
@@ -291,18 +298,16 @@ void create_process(const char *path, item shopping_cart[], int *shopping_cart_c
                     exit(EXIT_FAILURE);
                 }
 
-                // printf("PID %d create child for %s PID: %d \n", getppid(), entry->d_name, getpid());
+                pthread_mutex_init(&mutex, NULL);
+                create_thread(fullPath);
+                pthread_mutex_destroy(&mutex);
 
-                item results[100];
-                int results_count = 0;
-
-                create_thread(fullPath, results, &results_count);
-
+                close(pipe_fd[0]); // Close the read end
                 for (int i = 0; i < results_count; i++)
                     if (results[i].name[0] != '\0')
                         write(pipe_fd[1], &results[i], sizeof(item)); // Write the entire struct
+                close(pipe_fd[1]);                                    // Close the write end
 
-                close(pipe_fd[1]); // Close the write end after writing
                 closedir(dp);
                 exit(0);
             }
@@ -338,21 +343,14 @@ void create_process(const char *path, item shopping_cart[], int *shopping_cart_c
         buffer.number = temp_number;
         shopping_cart[*shopping_cart_count] = buffer;
         (*shopping_cart_count)++;
-        // printf("Parent received: %s, Price: %.2f, Score: %.2f, Entity: %d\n", buffer.name, buffer.price, buffer.score, buffer.entity);
     }
-
     close(pipe_fd[0]); // Close the read end of the pipe
-    closedir(dp);
 
     while (wait(NULL) != -1 || errno != ECHILD)
         ; // Wait for all child processes to terminate
-}
 
-typedef struct
-{
-    item cart[300];
-    int count;
-} shop_cart;
+    closedir(dp);
+}
 
 void *order(void *arg)
 {
@@ -393,14 +391,12 @@ void *order(void *arg)
         {
             max = shopping_cart_value[i];
             sprintf(best_store, "Max shopping cart value is %.3f for Store %d !\n", max, i + 1);
+            sprintf(chosen_store, "%d", i + 1);
         }
     }
     printf("%s", best_store);
-
     return NULL;
 }
-
-char chosen_store = '2';
 
 void *score(void *arg)
 {
@@ -414,18 +410,29 @@ void *score(void *arg)
     pthread_t thread_id = pthread_self(); // Get the thread ID
     printf("PID %d create thread for Scores TID: %lu \n", main_pid, (unsigned long)thread_id);
 
-    printf("Chosen store: %c \n", chosen_store);
-    printf("Enter score in range [1, 10] for: \n");
+    // Get score
+    printf("Chosen store: %s \n", chosen_store);
+    printf("Enter score in range [0, 5] for:\n");
     for (int i = 0; i < count; i++)
     {
-        if (cart[i].store_number != chosen_store)
+        if (cart[i].store_number != chosen_store[0])
         {
             continue;
         }
 
         printf("%s: ", cart[i].name);
-        scanf("%f", &item_scores[item_scores_count]);
-        // shart haye ino bayad bezanim ke masalan yaroo number bein 1 10 vared kone va ...
+        char input[50];
+        fgets(input, sizeof(input), stdin);
+        input[strcspn(input, "\n")] = 0;
+        sscanf(input, "%f", &item_scores[item_scores_count]);
+
+        if (item_scores[item_scores_count] < 0.0 || item_scores[item_scores_count] > 5.0)
+        {
+            printf("435\n");
+            printf("The score entered is not valid !\n");
+            i--;
+            continue;
+        }
 
         item_scores_count++;
     }
@@ -434,14 +441,13 @@ void *score(void *arg)
     {
         printf("%.2f\n", item_scores[i]);
     }
-
     return NULL;
 }
 
 void * final(void *arg)
 {
     pthread_t thread_id = pthread_self(); // Get the thread ID
-    printf("PID %d create thread for Final TID: %lu \n", main_pid, (unsigned long)thread_id);
+    // printf("PID %d create thread for Final TID: %lu \n", main_pid, (unsigned long)thread_id);
 
     return NULL;
 }
@@ -496,8 +502,6 @@ int main()
 
     if (pid1 == 0 || pid2 == 0) // All children processes
     {
-        close(pipe_fd[0]); // Close read end
-
         item shopping_cart[100];
         int shopping_cart_count = 0;
         float cart_price = 0.0;
@@ -506,9 +510,10 @@ int main()
         create_process(store_path, shopping_cart, &shopping_cart_count);
 
         // Send shopping cart data to parent via pipe
+        close(pipe_fd[0]); // Close read end
         write(pipe_fd[1], shopping_cart, sizeof(item) * shopping_cart_count);
-
         close(pipe_fd[1]); // Close write end
+
         exit(0);
     }
     else // Parent process
@@ -528,19 +533,19 @@ int main()
 
         for (int i = 0; i < all.count; i++)
         {
-            printf("Store %c, %s: Price = %.2f, Score = %.1f, Entity = %d, Number = %d\n",
+            printf("Store %c : %s: Price = %.2f, Score = %.1f, Entity = %d, Number = %d\n",
                    all.cart[i].store_number, all.cart[i].name, all.cart[i].price,
                    all.cart[i].score, all.cart[i].entity, all.cart[i].number);
         }
 
-        // pthread_t orders_th, scores_th, final_th;
-        // pthread_create(&orders_th, NULL, order, (void *)&all);
-        // pthread_create(&scores_th, NULL, score, (void *)&all);
-        // pthread_create(&final_th, NULL, final, NULL);
+        pthread_t orders_th, scores_th, final_th;
+        pthread_create(&orders_th, NULL, order, (void *)&all);
+        pthread_create(&scores_th, NULL, score, (void *)&all);
+        pthread_create(&final_th, NULL, final, NULL);
 
-        // pthread_join(orders_th, NULL);
-        // pthread_join(scores_th, NULL);
-        // pthread_join(final_th, NULL);
+        pthread_join(orders_th, NULL);
+        pthread_join(scores_th, NULL);
+        pthread_join(final_th, NULL);
     }
 
     return 0;
