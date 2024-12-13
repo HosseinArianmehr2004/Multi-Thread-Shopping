@@ -1,4 +1,4 @@
 Username: 44
 Number of times purchased from the Store1: 0
+Number of times purchased from the Store2: 1
 Number of times purchased from the Store3: 0
-Number of times purchased from the Store2: 0

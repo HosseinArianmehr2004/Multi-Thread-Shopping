@@ -23,6 +23,8 @@ typedef struct
     char path[200];
     char store_number;
 
+    pthread_t thread_id;
+
     int number;
 
     char name[50];
@@ -55,22 +57,29 @@ void login()
     fgets(username, sizeof(username), stdin);
     username[strcspn(username, "\n")] = 0;
 
-    // Create user file
+    // Create user file path
     char file_path[200];
     snprintf(file_path, sizeof(file_path), "Users/%s.txt", username);
-    FILE *file = fopen(file_path, "w");
-    if (file == NULL)
-    {
-        perror("Error creating file");
-        // return EXIT_FAILURE;
-    }
 
-    // Writing user information
-    fprintf(file, "Username: %s\n", username);
-    fprintf(file, "Number of times purchased from the Store1: %d\n", 0);
-    fprintf(file, "Number of times purchased from the Store3: %d\n", 0);
-    fprintf(file, "Number of times purchased from the Store2: %d\n", 0);
-    fclose(file);
+    // Checking for the existence of the user file
+    FILE *file = fopen(file_path, "r");
+
+    if (file) // File exists
+    {
+        fclose(file);
+    }
+    else // File not exists
+    {
+        // Create user file
+        file = fopen(file_path, "w");
+
+        // Writing information in file
+        fprintf(file, "Username: %s\n", username);
+        fprintf(file, "Number of times purchased from the Store1: %d\n", 0);
+        fprintf(file, "Number of times purchased from the Store2: %d\n", 0);
+        fprintf(file, "Number of times purchased from the Store3: %d\n", 0);
+        fclose(file);
+    }
 }
 
 void get_order_list()
@@ -173,10 +182,14 @@ void *read_file(void *arg)
         sscanf(file_path, "Dataset/Store%c/", &local_item->store_number);
         strcpy(local_item->path, file_path);
 
+        local_item->thread_id = pthread_self();
+
         pthread_mutex_lock(&mutex);
         results[results_count] = *local_item;
         results_count++;
         pthread_mutex_unlock(&mutex);
+
+        // the write (update) mechanism
     }
 
     // Read lines until fgets returns NULL (end of file)
@@ -250,7 +263,7 @@ void create_thread(const char *path)
     closedir(dp);
 }
 
-void create_process(const char *path, item shopping_cart[], int *shopping_cart_count)
+void create_process(const char *path)
 {
     struct dirent *entry;
     DIR *dp = opendir(path);
@@ -316,7 +329,6 @@ void create_process(const char *path, item shopping_cart[], int *shopping_cart_c
 
     close(pipe_fd[1]); // Close the write end of the pipe in the parent
 
-    *shopping_cart_count = 0;
     float price = 0.0;
     int temp_number = 0;
     int temp_entity = 0;
@@ -341,8 +353,8 @@ void create_process(const char *path, item shopping_cart[], int *shopping_cart_c
             temp_number++;
         }
         buffer.number = temp_number;
-        shopping_cart[*shopping_cart_count] = buffer;
-        (*shopping_cart_count)++;
+        results[results_count] = buffer;
+        results_count++;
     }
     close(pipe_fd[0]); // Close the read end of the pipe
 
@@ -425,6 +437,7 @@ void *score(void *arg)
         fgets(input, sizeof(input), stdin);
         input[strcspn(input, "\n")] = 0;
         sscanf(input, "%f", &item_scores[item_scores_count]);
+        sscanf(input, "%f", &data->cart[item_scores_count].score);
 
         if (item_scores[item_scores_count] < 0.0 || item_scores[item_scores_count] > 5.0)
         {
@@ -441,6 +454,12 @@ void *score(void *arg)
     {
         printf("%.2f\n", item_scores[i]);
     }
+    printf("......\n");
+    for (int i = 0; i < item_scores_count; i++)
+    {
+        printf("%.2f\n", data->cart[i].score);
+    }
+
     return NULL;
 }
 
@@ -448,6 +467,71 @@ void * final(void *arg)
 {
     pthread_t thread_id = pthread_self(); // Get the thread ID
     // printf("PID %d create thread for Final TID: %lu \n", main_pid, (unsigned long)thread_id);
+
+    // Open user file
+    FILE *file;
+    char file_path[200];
+
+    snprintf(file_path, sizeof(file_path), "Users/%s.txt", username);
+    file = fopen(file_path, "r");
+    if (file == NULL)
+    {
+        perror("Unable to open file");
+        return NULL;
+    }
+
+    // Reading information from file
+    char line[256];
+    int store_count[3] = {0, 0, 0};
+    int chosen_store_number = atoi(chosen_store);
+
+    while (fgets(line, sizeof(line), file))
+    {
+        line[strcspn(line, "\n")] = 0;
+
+        int store_number = line[40] - '0';
+        int number = line[43] - '0';
+
+        if (store_number == 1)
+        {
+            store_count[0] = number;
+        }
+        else if (store_number == 2)
+        {
+            store_count[1] = number;
+        }
+        else if (store_number == 3)
+        {
+            store_count[2] = number;
+        }
+
+        char check_line[256];
+
+        snprintf(check_line, sizeof(check_line),
+                 "Number of times purchased from the Store%d: %d",
+                 chosen_store_number, store_count[chosen_store_number - 1]);
+
+        if (strcmp(line, check_line) == 0)
+        {
+            store_count[chosen_store_number - 1]++;
+        }
+    }
+    fclose(file);
+
+    // Open file for update user information
+    file = fopen(file_path, "w");
+    if (file == NULL)
+    {
+        perror("Unable to open file");
+        return NULL;
+    }
+
+    // Writing information to file
+    fprintf(file, "Username: %s\n", username);
+    fprintf(file, "Number of times purchased from the Store1: %d\n", store_count[0]);
+    fprintf(file, "Number of times purchased from the Store2: %d\n", store_count[1]);
+    fprintf(file, "Number of times purchased from the Store3: %d\n", store_count[2]);
+    fclose(file);
 
     return NULL;
 }
@@ -502,16 +586,14 @@ int main()
 
     if (pid1 == 0 || pid2 == 0) // All children processes
     {
-        item shopping_cart[100];
-        int shopping_cart_count = 0;
         float cart_price = 0.0;
 
         printf("PID %d create child for Store%c PID: %d \n", main_pid, store_number, getpid());
-        create_process(store_path, shopping_cart, &shopping_cart_count);
+        create_process(store_path);
 
         // Send shopping cart data to parent via pipe
         close(pipe_fd[0]); // Close read end
-        write(pipe_fd[1], shopping_cart, sizeof(item) * shopping_cart_count);
+        write(pipe_fd[1], results, sizeof(item) * results_count);
         close(pipe_fd[1]); // Close write end
 
         exit(0);

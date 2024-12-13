@@ -1,0 +1,48 @@
+look 
+at the start of the program, i give an orderlist to this code then
+a lot of threads create in this code in create_thread function to find the products in ordrlist
+and all of them execute the read_file function 
+some of them that find a product that is in the orderlist put that item to an array named results 
+and when all the threads finished their execution i send this results array to the main process through pipes 
+
+at last
+the program gets score from user(through terminal) for each item 
+
+now i want to update the score, entity and etc. of that item 
+and consider that i want to update the file by that thread that read it not to create another thread to do that 
+i repeat a thread reads a file 
+if the file content is an item in orderlist 
+i want to somehow this thread update the file after getting the scores from user
+note that i have a lot files in Dataset directory each contains an item (i attached one of them)
+
+look 
+at the start 
+the main process creates 3 children 
+one per store (note that i have 3 stores)
+then each child forks 8 children (each to process the directioeis in the store folder) in create_process function
+in the last directories there are a lots of file that each has an item content 
+then each process creates some threads to read these file and if the itam is in order list 
+it puts this to results array 
+when all the threads done 
+each child send its results to the parent though pipe in line
+```close(pipe_fd[0]); // Close the read end
+                for (int i = 0; i < results_count; i++)
+                    if (results[i].name[0] != '\0')
+                        write(pipe_fd[1], &results[i], sizeof(item)); // Write the entire struct
+                close(pipe_fd[1]);                                    // Close the write end
+```
+then the parent gather all the results and fill its own results array 
+in line 
+```        buffer.number = temp_number;
+        results[results_count] = buffer;
+        results_count++;```
+then each parent send its results array to the main process
+in line ```        close(pipe_fd[0]); // Close read end
+        write(pipe_fd[1], results, sizeof(item) * results_count);
+        close(pipe_fd[1]); // Close write end```"in the main function"
+and the main process gather all the results and store them in the all.cart
+then this all struct which conteins all the items founded and the number of all items is sended to the threads orders, scores, final
+in scores thread 
+the the scores of the items changes 
+now i want to backtrack all these steps from main process to -> its childern -> childern-> and at last to threads that read files
+and somehow understand which thread was processing which item and when it understand and found that item update the score in that file
