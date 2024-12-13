@@ -24,6 +24,7 @@ typedef struct
     char store_number;
 
     pthread_t thread_id;
+    pid_t process_id;
 
     int number;
 
@@ -183,6 +184,7 @@ void *read_file(void *arg)
         strcpy(local_item->path, file_path);
 
         local_item->thread_id = pthread_self();
+        local_item->process_id = getpid();
 
         pthread_mutex_lock(&mutex);
         results[results_count] = *local_item;
@@ -274,8 +276,7 @@ void create_process(const char *path)
         return;
     }
 
-    int pipe_fd[2]; // Pipe file descriptors
-
+    int pipe_fd[2];          // Pipe file descriptors
     if (pipe(pipe_fd) == -1) // Create a pipe
     {
         perror("Pipe failed");
@@ -441,7 +442,6 @@ void *score(void *arg)
 
         if (item_scores[item_scores_count] < 0.0 || item_scores[item_scores_count] > 5.0)
         {
-            printf("435\n");
             printf("The score entered is not valid !\n");
             i--;
             continue;
@@ -588,7 +588,7 @@ int main()
     {
         float cart_price = 0.0;
 
-        printf("PID %d create child for Store%c PID: %d \n", main_pid, store_number, getpid());
+        // printf("PID %d create child for Store%c PID: %d \n", main_pid, store_number, getpid());
         create_process(store_path);
 
         // Send shopping cart data to parent via pipe
@@ -620,14 +620,14 @@ int main()
                    all.cart[i].score, all.cart[i].entity, all.cart[i].number);
         }
 
-        pthread_t orders_th, scores_th, final_th;
-        pthread_create(&orders_th, NULL, order, (void *)&all);
-        pthread_create(&scores_th, NULL, score, (void *)&all);
-        pthread_create(&final_th, NULL, final, NULL);
+        // pthread_t orders_th, scores_th, final_th;
+        // pthread_create(&orders_th, NULL, order, (void *)&all);
+        // pthread_create(&scores_th, NULL, score, (void *)&all);
+        // pthread_create(&final_th, NULL, final, NULL);
 
-        pthread_join(orders_th, NULL);
-        pthread_join(scores_th, NULL);
-        pthread_join(final_th, NULL);
+        // pthread_join(orders_th, NULL);
+        // pthread_join(scores_th, NULL);
+        // pthread_join(final_th, NULL);
     }
 
     return 0;
