@@ -451,15 +451,15 @@ int main()
     login();
     get_order_list();
 
+    main_pid = getpid();
+    printf("%s create PID: %d\n", username, main_pid);
+
     int pipe_fd[2];
     if (pipe(pipe_fd) == -1)
     {
         perror("Pipe failed");
         return 1;
     }
-
-    main_pid = getpid();
-    printf("%s create PID: %d\n", username, main_pid);
 
     pid_t pid1 = fork();
     if (pid1 < 0)
@@ -475,23 +475,23 @@ int main()
         return 1;
     }
 
-    char store_path[200];
-    char store[10];
+    char store_path[20];
+    char store_number;
 
-    if (pid1 == 0 && pid2 == 0)
+    if (pid1 == 0 && pid2 != 0)
     {
         strcpy(store_path, "Dataset/Store1");
-        strcpy(store, "Store 1");
+        store_number = '1';
     }
-    else if (pid1 == 0 && pid2 != 0)
+    else if (pid1 == 0 && pid2 == 0)
     {
         strcpy(store_path, "Dataset/Store2");
-        strcpy(store, "Store 2");
+        store_number = '2';
     }
     else if (pid1 != 0 && pid2 == 0)
     {
         strcpy(store_path, "Dataset/Store3");
-        strcpy(store, "Store 3");
+        store_number = '3';
     }
 
     if (pid1 == 0 || pid2 == 0) // All children processes
@@ -502,7 +502,7 @@ int main()
         int shopping_cart_count = 0;
         float cart_price = 0.0;
 
-        printf("PID %d create child for %s PID: %d \n", main_pid, store, getpid());
+        printf("PID %d create child for Store%c PID: %d \n", main_pid, store_number, getpid());
         create_process(store_path, shopping_cart, &shopping_cart_count);
 
         // Send shopping cart data to parent via pipe
@@ -533,13 +533,13 @@ int main()
                    all.cart[i].score, all.cart[i].entity, all.cart[i].number);
         }
 
-        pthread_t orders_th, scores_th, final_th;
-        pthread_create(&orders_th, NULL, order, (void *)&all);
-        pthread_create(&scores_th, NULL, score, (void *)&all);
+        // pthread_t orders_th, scores_th, final_th;
+        // pthread_create(&orders_th, NULL, order, (void *)&all);
+        // pthread_create(&scores_th, NULL, score, (void *)&all);
         // pthread_create(&final_th, NULL, final, NULL);
 
-        pthread_join(orders_th, NULL);
-        pthread_join(scores_th, NULL);
+        // pthread_join(orders_th, NULL);
+        // pthread_join(scores_th, NULL);
         // pthread_join(final_th, NULL);
     }
 
