@@ -367,15 +367,15 @@ void *order(void *arg)
     {
         if (cart[i].store_number == '1')
         {
-            shopping_cart_value[0] += cart[i].score * cart[i].number / cart[i].price;
+            shopping_cart_value[0] += cart[i].score * cart[i].number * 10 / cart[i].price;
         }
         if (cart[i].store_number == '2')
         {
-            shopping_cart_value[1] += cart[i].score * cart[i].number / cart[i].price;
+            shopping_cart_value[1] += cart[i].score * cart[i].number * 10 / cart[i].price;
         }
         if (cart[i].store_number == '3')
         {
-            shopping_cart_value[2] += cart[i].score * cart[i].number / cart[i].price;
+            shopping_cart_value[2] += cart[i].score * cart[i].number * 10 / cart[i].price;
         }
     }
     printf("Shopping cart value 1 : %.3f\n", shopping_cart_value[0]);
