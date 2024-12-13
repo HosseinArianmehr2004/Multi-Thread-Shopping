@@ -41,12 +41,16 @@ typedef struct
 } shop_cart;
 
 pid_t main_pid;
-pthread_mutex_t mutex;
+pthread_mutex_t results_array_mutex; // to put the items in the results correctly
+pthread_mutex_t log_file_mutex;
 
 int results_count = 0;
 float price_threshold;
 char username[100];
 char chosen_store[2];
+
+int order_number = 1; // ino saeed tooye final zade bayad doros beshe *********************************************************************************************
+char log_file_full_path[1024];
 
 item results[100];
 order_list order_list_items[100];
@@ -166,8 +170,29 @@ void *read_file(void *arg)
         return NULL;
     }
 
+    local_item->process_id = getpid();
+    local_item->thread_id = pthread_self();
+
     if (fgets(line, sizeof(line), file) != NULL)
         sscanf(line, "Name: %199[^\n]", local_item->name);
+
+    pthread_mutex_lock(&log_file_mutex);
+    FILE *log_file = fopen(log_file_full_path, "a");
+    if (log_file == NULL)
+    {
+        perror("Error opening file");
+        fclose(file);
+        free(file_path);
+        free(local_item);
+        return NULL;
+    }
+    if (is_in_order_list(local_item))
+        fprintf(log_file, "Thread with TID = %lu       (read and found): ((%s))\n", local_item->thread_id, local_item->name);
+    else
+        fprintf(log_file, "Thread with TID = %lu read: %s\n", local_item->thread_id, local_item->name);
+
+    fclose(log_file);
+    pthread_mutex_unlock(&log_file_mutex);
 
     if (is_in_order_list(local_item))
     {
@@ -183,27 +208,50 @@ void *read_file(void *arg)
         sscanf(file_path, "Dataset/Store%c/", &local_item->store_number);
         strcpy(local_item->path, file_path);
 
-        local_item->thread_id = pthread_self();
-        local_item->process_id = getpid();
-
-        pthread_mutex_lock(&mutex);
+        pthread_mutex_lock(&results_array_mutex);
         results[results_count] = *local_item;
         results_count++;
-        pthread_mutex_unlock(&mutex);
+        pthread_mutex_unlock(&results_array_mutex);
 
         // the write (update) mechanism
     }
-
-    // Read lines until fgets returns NULL (end of file)
-    // while (fgets(line, sizeof(line), file) != NULL)
-    // {
-    //     printf("%s", line);
-    // }
 
     fclose(file);
     free(file_path);
     free(local_item);
     return NULL;
+}
+
+int create_log_file(const char *path)
+{
+    char log_path[1024];
+    snprintf(log_path, sizeof(log_path), "%s/log", path);
+
+    struct stat st = {0};
+    if (stat(log_path, &st) == -1) // Check if the directory exists
+    {
+        if (mkdir(log_path, 0700) != 0) // Create the directory
+        {
+            perror("mkdir failed");
+            return EXIT_FAILURE;
+        }
+    }
+
+    snprintf(log_file_full_path, sizeof(log_file_full_path), "%s/%s_Order%d.log", log_path, username, order_number);
+
+    pthread_mutex_lock(&log_file_mutex); // there's no need to lock this because the threads trigger and try to write into file after this fuction executed
+    FILE *file = fopen(log_file_full_path, "w");
+    if (file == NULL)
+    {
+        printf("%s\n", path);
+        perror("Failed to open file //in create_log_file function");
+        return EXIT_FAILURE;
+    }
+    fprintf(file, "Process PID: %d\n", getpid());
+    fclose(file);
+    pthread_mutex_unlock(&log_file_mutex);
+
+    return EXIT_SUCCESS;
 }
 
 void create_thread(const char *path)
@@ -225,13 +273,13 @@ void create_thread(const char *path)
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
 
-        char fullPath[1024];
-        snprintf(fullPath, sizeof(fullPath), "%s/%s", path, entry->d_name);
+        char full_path[1024];
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
 
         // Check if it's a regular file
         if (entry->d_type == DT_REG)
         {
-            if (pthread_create(&threads[thread_count], NULL, read_file, (void *)strdup(fullPath)) != 0)
+            if (pthread_create(&threads[thread_count], NULL, read_file, (void *)strdup(full_path)) != 0)
             {
                 perror("Failed to create thread");
                 closedir(dp);
@@ -305,16 +353,19 @@ void create_process(const char *path)
             {
                 // printf("PID %d create child for %s PID: %d \n", getppid(), entry->d_name, getpid());
 
-                char fullPath[1024];
-                if (snprintf(fullPath, sizeof(fullPath), "%s/%s", path, entry->d_name) >= 1024)
+                char full_path[1024];
+                if (snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name) >= 1024)
                 {
                     fprintf(stderr, "Path too long: %s/%s\n", path, entry->d_name);
                     exit(EXIT_FAILURE);
                 }
 
-                pthread_mutex_init(&mutex, NULL);
-                create_thread(fullPath);
-                pthread_mutex_destroy(&mutex);
+                pthread_mutex_init(&results_array_mutex, NULL);
+                pthread_mutex_init(&log_file_mutex, NULL);
+                create_log_file(full_path);
+                create_thread(full_path);
+                pthread_mutex_destroy(&results_array_mutex);
+                pthread_mutex_destroy(&log_file_mutex);
 
                 close(pipe_fd[0]); // Close the read end
                 for (int i = 0; i < results_count; i++)
@@ -466,7 +517,7 @@ void *score(void *arg)
 void * final(void *arg)
 {
     pthread_t thread_id = pthread_self(); // Get the thread ID
-    // printf("PID %d create thread for Final TID: %lu \n", main_pid, (unsigned long)thread_id);
+    printf("PID %d create thread for Final TID: %lu \n", main_pid, (unsigned long)thread_id);
 
     // Open user file
     FILE *file;
@@ -532,6 +583,34 @@ void * final(void *arg)
     fprintf(file, "Number of times purchased from the Store2: %d\n", store_count[1]);
     fprintf(file, "Number of times purchased from the Store3: %d\n", store_count[2]);
     fclose(file);
+
+    // Calculate the price of the shopping cart for chosen store
+    shop_cart *data = (shop_cart *)arg;
+    item *cart = data->cart; // the shopping cart
+    int count = data->count;
+    float shopping_cart_price[3] = {0.0, 0.0, 0.0};
+
+    for (int i = 0; i < count; i++)
+    {
+        if (cart[i].store_number == chosen_store[0])
+        {
+            shopping_cart_price[chosen_store_number - 1] += cart[i].number * cart[i].price;
+        }
+    }
+
+    printf("Shopping cart price %d before discount: %.3f\n",
+           chosen_store_number, shopping_cart_price[chosen_store_number - 1]);
+
+    order_number = store_count[chosen_store_number - 1]; // in bayad zoodtar maloom beshe ta file jadid ijad kone ***************************************************
+
+    // Apply discount
+    if (store_count[chosen_store_number - 1] > 1)
+    {
+        shopping_cart_price[chosen_store_number - 1] *= 0.9;
+    }
+
+    printf("Shopping cart price %d after discount: %.3f\n",
+           chosen_store_number, shopping_cart_price[chosen_store_number - 1]);
 
     return NULL;
 }
@@ -620,14 +699,14 @@ int main()
                    all.cart[i].score, all.cart[i].entity, all.cart[i].number);
         }
 
-        // pthread_t orders_th, scores_th, final_th;
-        // pthread_create(&orders_th, NULL, order, (void *)&all);
-        // pthread_create(&scores_th, NULL, score, (void *)&all);
-        // pthread_create(&final_th, NULL, final, NULL);
+        pthread_t orders_th, scores_th, final_th;
+        pthread_create(&orders_th, NULL, order, (void *)&all);
+        pthread_create(&scores_th, NULL, score, (void *)&all);
+        pthread_create(&final_th, NULL, final, (void *)&all);
 
-        // pthread_join(orders_th, NULL);
-        // pthread_join(scores_th, NULL);
-        // pthread_join(final_th, NULL);
+        pthread_join(orders_th, NULL);
+        pthread_join(scores_th, NULL);
+        pthread_join(final_th, NULL);
     }
 
     return 0;
