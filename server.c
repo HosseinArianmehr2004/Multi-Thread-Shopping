@@ -64,19 +64,22 @@ void login()
 
 int main()
 {
-    login();
+    while (1)
+    {
+        login();
 
-    // Write username in users file
-    FILE *file = fopen("users.txt", "w");
-    fprintf(file, "%s\n", username);
-    fclose(file);
+        // Write username in users file
+        FILE *file = fopen("users.txt", "w");
+        fprintf(file, "%s\n", username);
+        fclose(file);
 
-    // Open a new terminal window & transfer the order number
-    char command[100];
-    snprintf(command, sizeof(command),
-             "gnome-terminal -- bash -c 'gcc client.c -o client && ./client %d; exec bash'",
-             order_number);
-    system(command);
+        // Open a new terminal window & transfer the order number
+        char command[100];
+        snprintf(command, sizeof(command),
+                 "gnome-terminal -- bash -c 'gcc client.c -o client && ./client %d; exec bash'",
+                 order_number);
+        system(command);
+    }
 
     return 0;
 }
