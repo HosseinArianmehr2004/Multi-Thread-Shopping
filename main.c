@@ -620,6 +620,9 @@ int main()
     login();
     get_order_list();
 
+    // Open a new terminal window
+    system("gnome-terminal &");
+
     main_pid = getpid();
     printf("%s create PID: %d\n", username, main_pid);
 
