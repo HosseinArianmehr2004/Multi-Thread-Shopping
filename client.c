@@ -55,63 +55,6 @@ char log_file_full_path[1024];
 item results[100];
 order_list order_list_items[100];
 
-void login()
-{
-    // Get username
-    printf("Enter your username: ");
-    fgets(username, sizeof(username), stdin);
-    username[strcspn(username, "\n")] = 0;
-
-    // Create user file path
-    char file_path[200];
-    snprintf(file_path, sizeof(file_path), "Users/%s.txt", username);
-
-    // Checking for the existence of the user file
-    FILE *file = fopen(file_path, "r");
-
-    if (file) // User file exists
-    {
-        // Calculate the number of previous purchases made by the user
-        char line[256];
-        int store_count[3] = {0, 0, 0};
-
-        while (fgets(line, sizeof(line), file))
-        {
-            line[strcspn(line, "\n")] = 0;
-
-            int store_number = line[40] - '0';
-            int number = line[43] - '0';
-
-            if (store_number == 1)
-            {
-                store_count[0] = number;
-            }
-            else if (store_number == 2)
-            {
-                store_count[1] = number;
-            }
-            else if (store_number == 3)
-            {
-                store_count[2] = number;
-            }
-        }
-
-        order_number = store_count[0] + store_count[1] + store_count[2];
-    }
-    else // User file not exists
-    {
-        // Create user file
-        file = fopen(file_path, "w");
-
-        // Writing information in file
-        fprintf(file, "Username: %s\n", username);
-        fprintf(file, "Number of times purchased from the Store1: %d\n", 0);
-        fprintf(file, "Number of times purchased from the Store2: %d\n", 0);
-        fprintf(file, "Number of times purchased from the Store3: %d\n", 0);
-    }
-    fclose(file);
-}
-
 void get_order_list()
 {
     printf("Orderlist0:\n");
@@ -631,13 +574,19 @@ void * final(void *arg)
     return NULL;
 }
 
-int main()
+int main(int argc, char *argv[])
 {
-    login();
-    get_order_list();
 
-    // Open a new terminal window
-    system("gnome-terminal &");
+    // Read username from users file
+    FILE *file = fopen("users.txt", "r");
+    fgets(username, sizeof(username), file);
+    username[strcspn(username, "\n")] = 0;
+    fclose(file);
+
+    // Receive user order number from server
+    order_number = atoi(argv[1]);
+
+    get_order_list();
 
     main_pid = getpid();
     printf("%s create PID: %d\n", username, main_pid);
@@ -699,7 +648,7 @@ int main()
     else // Parent process
     {
         // while (wait(NULL) != -1 || errno != ECHILD)
-            // ; // waits until all the children terminate
+        // ; // waits until all the children terminate
 
         shop_cart all;
         all.count = 0;
