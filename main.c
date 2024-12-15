@@ -313,7 +313,7 @@ void create_thread(const char *path)
     closedir(dp);
 }
 
-void create_process(const char *path)
+pid_t create_process(const char *path)
 {
     struct dirent *entry;
     DIR *dp = opendir(path);
@@ -321,99 +321,94 @@ void create_process(const char *path)
     if (dp == NULL)
     {
         perror("Error opening directory");
-        return;
+        return 1;
     }
 
-    int pipe_fd[2];          // Pipe file descriptors
+    int pipe_fd[2];
     if (pipe(pipe_fd) == -1) // Create a pipe
     {
         perror("Pipe failed");
         closedir(dp);
-        return;
+        return 1;
     }
 
-    while ((entry = readdir(dp)) != NULL)
+    pid_t pid = getpid();
+    for (int i = 0; i < 8; i++) // create 8 chlderen for each store
     {
-        // Skip current and parent directory entries
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
-            continue;
-
-        // Check if the entry is a directory
-        if (entry->d_type == DT_DIR)
+        if (pid != 0)
         {
-            pid_t pid = fork();
-
-            if (pid < 0) // Error in fork
+            do
             {
-                perror("Fork failed");
-                closedir(dp);
-                return;
-            }
-            if (pid == 0) // Child process
-            {
-                // printf("PID %d create child for %s PID: %d \n", getppid(), entry->d_name, getpid());
+                entry = readdir(dp);
 
-                char full_path[1024];
-                if (snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name) >= 1024)
+            } while (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0);
+
+            pid = fork();
+        }
+    }
+    // printf("%d %d\n", getpid(), pid);
+
+    if (pid == 0) // childeren
+    {
+        // printf("PID %d create child for %s PID: %d \n", getppid(), entry->d_name, getpid());
+
+        char full_path[1024];
+        if (snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name) >= 1024)
+        {
+            fprintf(stderr, "Path too long: %s/%s\n", path, entry->d_name);
+            exit(EXIT_FAILURE);
+        }
+
+        pthread_mutex_init(&results_array_mutex, NULL);
+        pthread_mutex_init(&log_file_mutex, NULL);
+        create_log_file(full_path);
+        create_thread(full_path);
+        pthread_mutex_destroy(&results_array_mutex);
+        pthread_mutex_destroy(&log_file_mutex);
+
+        close(pipe_fd[0]); // Close the read end
+        for (int i = 0; i < results_count; i++)
+            if (results[i].name[0] != '\0')
+                write(pipe_fd[1], &results[i], sizeof(item)); // Write the entire struct
+        close(pipe_fd[1]);                                    // Close the write end
+    }
+    else // parent
+    {
+        float price = 0.0;
+        int temp_number = 0;
+        int temp_entity = 0;
+        item buffer;
+
+        close(pipe_fd[1]); // Close the write end
+        while (read(pipe_fd[0], &buffer, sizeof(item)) > 0)
+        {
+            temp_number = 0;
+            temp_entity = buffer.entity;
+            for (int i = 0; i < buffer.number; i++)
+            {
+                if (temp_number > temp_entity || temp_entity == 0)
                 {
-                    fprintf(stderr, "Path too long: %s/%s\n", path, entry->d_name);
-                    exit(EXIT_FAILURE);
+                    break;
                 }
-
-                pthread_mutex_init(&results_array_mutex, NULL);
-                pthread_mutex_init(&log_file_mutex, NULL);
-                create_log_file(full_path);
-                create_thread(full_path);
-                pthread_mutex_destroy(&results_array_mutex);
-                pthread_mutex_destroy(&log_file_mutex);
-
-                close(pipe_fd[0]); // Close the read end
-                for (int i = 0; i < results_count; i++)
-                    if (results[i].name[0] != '\0')
-                        write(pipe_fd[1], &results[i], sizeof(item)); // Write the entire struct
-                close(pipe_fd[1]);                                    // Close the write end
-
-                closedir(dp);
-                exit(0);
+                price += buffer.price;
+                if (price > price_threshold)
+                {
+                    price -= buffer.price;
+                    break;
+                }
+                temp_entity--; // in bayad tooye filesh ham doros beshe update beshe
+                temp_number++;
             }
+            buffer.number = temp_number;
+            results[results_count] = buffer;
+            results_count++;
         }
+        close(pipe_fd[0]); // Close the read end
     }
-
-    close(pipe_fd[1]); // Close the write end of the pipe in the parent
-
-    float price = 0.0;
-    int temp_number = 0;
-    int temp_entity = 0;
-    item buffer;
-    while (read(pipe_fd[0], &buffer, sizeof(item)) > 0)
-    {
-        temp_number = 0;
-        temp_entity = buffer.entity;
-        for (int i = 0; i < buffer.number; i++)
-        {
-            if (temp_number > temp_entity || temp_entity == 0)
-            {
-                break;
-            }
-            price += buffer.price;
-            if (price > price_threshold)
-            {
-                price -= buffer.price;
-                break;
-            }
-            temp_entity--; // in bayad tooye filesh ham doros beshe update beshe
-            temp_number++;
-        }
-        buffer.number = temp_number;
-        results[results_count] = buffer;
-        results_count++;
-    }
-    close(pipe_fd[0]); // Close the read end of the pipe
-
-    while (wait(NULL) != -1 || errno != ECHILD)
-        ; // Wait for all child processes to terminate
 
     closedir(dp);
+
+    return pid;
 }
 
 void *order(void *arg)
@@ -621,7 +616,7 @@ int main()
     get_order_list();
 
     // Open a new terminal window
-    system("gnome-terminal &");
+    // system("gnome-terminal &");
 
     main_pid = getpid();
     printf("%s create PID: %d\n", username, main_pid);
@@ -668,17 +663,19 @@ int main()
 
     if (pid1 == 0 || pid2 == 0) // All children processes
     {
-        float cart_price = 0.0;
-
         // printf("PID %d create child for Store%c PID: %d \n", main_pid, store_number, getpid());
-        create_process(store_path);
+        pid_t returned_pid = create_process(store_path);
+        // printf("returned_pid = %d\n", returned_pid);
 
-        // Send shopping cart data to parent via pipe
-        close(pipe_fd[0]); // Close read end
-        write(pipe_fd[1], results, sizeof(item) * results_count);
-        close(pipe_fd[1]); // Close write end
+        if (returned_pid != 0)
+        {
+            // Send shopping cart data to parent via pipe
+            close(pipe_fd[0]); // Close read end
+            write(pipe_fd[1], results, sizeof(item) * results_count);
+            close(pipe_fd[1]); // Close write end
+        }
 
-        exit(0);
+        // exit(0);
     }
     else // Parent process
     {
