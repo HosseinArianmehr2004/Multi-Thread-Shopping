@@ -49,7 +49,7 @@ float price_threshold;
 char username[100];
 char chosen_store[2];
 
-int order_number = 1; // ino saeed tooye final zade bayad doros beshe *********************************************************************************************
+int order_number;
 char log_file_full_path[1024];
 
 item results[100];
@@ -69,11 +69,36 @@ void login()
     // Checking for the existence of the user file
     FILE *file = fopen(file_path, "r");
 
-    if (file) // File exists
+    if (file) // User file exists
     {
-        fclose(file);
+        // Calculate the number of previous purchases made by the user
+        char line[256];
+        int store_count[3] = {0, 0, 0};
+
+        while (fgets(line, sizeof(line), file))
+        {
+            line[strcspn(line, "\n")] = 0;
+
+            int store_number = line[40] - '0';
+            int number = line[43] - '0';
+
+            if (store_number == 1)
+            {
+                store_count[0] = number;
+            }
+            else if (store_number == 2)
+            {
+                store_count[1] = number;
+            }
+            else if (store_number == 3)
+            {
+                store_count[2] = number;
+            }
+        }
+
+        order_number = store_count[0] + store_count[1] + store_count[2];
     }
-    else // File not exists
+    else // User file not exists
     {
         // Create user file
         file = fopen(file_path, "w");
@@ -83,8 +108,8 @@ void login()
         fprintf(file, "Number of times purchased from the Store1: %d\n", 0);
         fprintf(file, "Number of times purchased from the Store2: %d\n", 0);
         fprintf(file, "Number of times purchased from the Store3: %d\n", 0);
-        fclose(file);
     }
+    fclose(file);
 }
 
 void get_order_list()
@@ -374,38 +399,34 @@ pid_t create_process(const char *path)
     }
     else // parent
     {
-        float price = 0.0;
-        int temp_number = 0;
-        int temp_entity = 0;
         item buffer;
 
         close(pipe_fd[1]); // Close the write end
+
+        // Calculating the number of allowed purchases for each product
         while (read(pipe_fd[0], &buffer, sizeof(item)) > 0)
         {
-            temp_number = 0;
-            temp_entity = buffer.entity;
-            for (int i = 0; i < buffer.number; i++)
+            int max_number = 0;
+
+            if (buffer.entity < buffer.number)
             {
-                if (temp_number > temp_entity || temp_entity == 0)
-                {
-                    break;
-                }
-                price += buffer.price;
-                if (price > price_threshold)
-                {
-                    price -= buffer.price;
-                    break;
-                }
-                temp_entity--; // in bayad tooye filesh ham doros beshe update beshe
-                temp_number++;
+                buffer.number = buffer.entity;
             }
-            buffer.number = temp_number;
+            if (price_threshold != FLT_MAX)
+            {
+                max_number = price_threshold / buffer.price;
+                if (max_number < buffer.number)
+                {
+                    buffer.number = max_number;
+                }
+                price_threshold -= buffer.price * buffer.number;
+            }
+
             results[results_count] = buffer;
             results_count++;
         }
         close(pipe_fd[0]); // Close the read end
     }
-
     closedir(dp);
 
     return pid;
@@ -616,7 +637,7 @@ int main()
     get_order_list();
 
     // Open a new terminal window
-    // system("gnome-terminal &");
+    system("gnome-terminal &");
 
     main_pid = getpid();
     printf("%s create PID: %d\n", username, main_pid);
@@ -674,13 +695,11 @@ int main()
             write(pipe_fd[1], results, sizeof(item) * results_count);
             close(pipe_fd[1]); // Close write end
         }
-
-        // exit(0);
     }
     else // Parent process
     {
-        while (wait(NULL) != -1 || errno != ECHILD)
-            ; // waits until all the children terminate
+        // while (wait(NULL) != -1 || errno != ECHILD)
+            // ; // waits until all the children terminate
 
         shop_cart all;
         all.count = 0;
@@ -701,8 +720,8 @@ int main()
 
         pthread_t orders_th, scores_th, final_th;
         pthread_create(&orders_th, NULL, order, (void *)&all);
-        pthread_create(&scores_th, NULL, score, (void *)&all);
         pthread_create(&final_th, NULL, final, (void *)&all);
+        pthread_create(&scores_th, NULL, score, (void *)&all);
 
         pthread_join(orders_th, NULL);
         pthread_join(scores_th, NULL);
