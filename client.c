@@ -45,7 +45,7 @@ pthread_mutex_t results_array_mutex; // to put the items in the results correctl
 pthread_mutex_t log_file_mutex;
 
 int results_count = 0;
-float price_threshold;
+float price_threshold = FLT_MAX;
 char username[100];
 char chosen_store[2];
 
@@ -54,6 +54,12 @@ char log_file_full_path[1024];
 
 item results[100];
 order_list order_list_items[100];
+
+bool get_score_lock = true;
+
+pthread_t threads[100];
+int thread_count = 0;
+pthread_mutex_t threads_done_reading_mutex; // for changing the thread_count variable. once a thread done reading it will sleep(if it will update) or return and then it decrement the thread_count varaible by 1 and when thread_count==0 we found that all the threads are done reading
 
 void get_order_list()
 {
@@ -88,11 +94,7 @@ void get_order_list()
     printf("Enter your price threshold: ");
     fgets(input, sizeof(input), stdin);
     input[strcspn(input, "\n")] = 0;
-    if (strlen(input) == 0)
-    {
-        price_threshold = FLT_MAX; // Input is empty
-    }
-    else
+    if (strlen(input) != 0)
     {
         sscanf(input, "%f", &price_threshold);
     }
@@ -181,13 +183,29 @@ void *read_file(void *arg)
         results_count++;
         pthread_mutex_unlock(&results_array_mutex);
 
-        // the write (update) mechanism
-    }
+        pthread_mutex_lock(&threads_done_reading_mutex);
+        thread_count--;
+        pthread_mutex_unlock(&threads_done_reading_mutex);
 
-    fclose(file);
-    free(file_path);
-    free(local_item);
-    return NULL;
+        fclose(file);
+        free(file_path);
+        free(local_item);
+
+        // through the item.path you can update the file
+
+        return NULL;
+    }
+    else
+    {
+        pthread_mutex_lock(&threads_done_reading_mutex);
+        thread_count--;
+        pthread_mutex_unlock(&threads_done_reading_mutex);
+
+        fclose(file);
+        free(file_path);
+        free(local_item);
+        return NULL;
+    }
 }
 
 int create_log_file(const char *path)
@@ -233,8 +251,8 @@ void create_thread(const char *path)
         return;
     }
 
-    pthread_t threads[100];
-    int thread_count = 0;
+    // pthread_t threads[100];
+    // int thread_count = 0;
 
     while ((entry = readdir(dp)) != NULL)
     {
@@ -269,14 +287,21 @@ void create_thread(const char *path)
 
             // printf("PID %d create thread for %sID TID: %lu \n", getpid(), product_ID, (unsigned long)threads[thread_count]);
 
+            pthread_mutex_lock(&threads_done_reading_mutex);
             thread_count++;
+            pthread_mutex_unlock(&threads_done_reading_mutex);
         }
     }
 
-    for (int i = 0; i < thread_count; i++)
-    {
-        pthread_join(threads[i], NULL);
-    }
+    while (thread_count != 0)
+        ; // waits while all threads finish their reading
+
+    sleep(1); // Sleep for 2 seconds before waking up threads
+
+    // for (int i = 0; i < thread_count; i++)
+    // {
+    //     pthread_join(threads[i], NULL);
+    // }
 
     closedir(dp);
 }
@@ -329,10 +354,14 @@ pid_t create_process(const char *path)
 
         pthread_mutex_init(&results_array_mutex, NULL);
         pthread_mutex_init(&log_file_mutex, NULL);
+        pthread_mutex_init(&threads_done_reading_mutex, NULL);
+
         create_log_file(full_path);
         create_thread(full_path);
+
         pthread_mutex_destroy(&results_array_mutex);
         pthread_mutex_destroy(&log_file_mutex);
+        pthread_mutex_destroy(&threads_done_reading_mutex);
 
         close(pipe_fd[0]); // Close the read end
         for (int i = 0; i < results_count; i++)
@@ -423,6 +452,10 @@ void *order(void *arg)
 
 void *score(void *arg)
 {
+    while (get_score_lock == true)
+        ;
+    get_score_lock = true;
+
     shop_cart *data = (shop_cart *)arg;
     item *cart = data->cart; // the shopping cart
     int count = data->count;
@@ -475,6 +508,8 @@ void *score(void *arg)
 
 void * final(void *arg)
 {
+    get_score_lock = true;
+
     pthread_t thread_id = pthread_self(); // Get the thread ID
     printf("PID %d create thread for Final TID: %lu \n", main_pid, (unsigned long)thread_id);
 
@@ -570,6 +605,8 @@ void * final(void *arg)
 
     printf("Shopping cart price %d after discount: %.3f\n",
            chosen_store_number, shopping_cart_price[chosen_store_number - 1]);
+
+    get_score_lock = false;
 
     return NULL;
 }
@@ -675,6 +712,9 @@ int main(int argc, char *argv[])
         pthread_join(orders_th, NULL);
         pthread_join(scores_th, NULL);
         pthread_join(final_th, NULL);
+
+        while (wait(NULL) != -1 || errno != ECHILD)
+            ; // waits until all the children terminate
     }
 
     return 0;
