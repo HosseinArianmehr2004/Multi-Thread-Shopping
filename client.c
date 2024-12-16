@@ -274,7 +274,7 @@ void create_thread(const char *path)
                 strcpy(product_ID, str);
             }
 
-            printf("PID %d create thread for %sID TID: %lu \n", getpid(), product_ID, (unsigned long)threads[thread_count]);
+            // printf("PID %d create thread for %sID TID: %lu \n", getpid(), product_ID, (unsigned long)threads[thread_count]);
 
             pthread_mutex_lock(&threads_done_reading_mutex);
             thread_count++;
