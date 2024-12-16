@@ -1,3 +1,4 @@
+#include <time.h>
 #include <stdio.h>
 #include <float.h>
 #include <errno.h>
@@ -24,10 +25,12 @@ typedef struct
     float price;
     float score;
     int entity;
-    char store_number;
-    int number;
+    char last_modified[100];
 
+    int number;
+    char store_number;
     char path[200];
+
     pthread_t thread_id;
     pid_t process_id;
 } item;
@@ -141,7 +144,9 @@ void *read_file(void *arg)
     local_item->thread_id = pthread_self();
 
     if (fgets(line, sizeof(line), file) != NULL)
+    {
         sscanf(line, "Name: %49[^\n]", local_item->name);
+    }
 
     // Write in log file
     pthread_mutex_lock(&log_file_mutex);
@@ -168,17 +173,27 @@ void *read_file(void *arg)
     // Read all the founded items file content
     if (is_in_order_list(local_item))
     {
-        if (fgets(line, sizeof(line), file) != NULL)
+        while (fgets(line, sizeof(line), file))
         {
-            sscanf(line, "Price: %f", &local_item->price);
-        }
-        if (fgets(line, sizeof(line), file) != NULL)
-        {
-            sscanf(line, "Score: %f", &local_item->score);
-        }
-        if (fgets(line, sizeof(line), file) != NULL)
-        {
-            sscanf(line, "Entity: %d", &local_item->entity);
+            line[strcspn(line, "\n")] = 0;
+
+            if (strlen(line) == 0) // The line is empty
+            {
+                continue;
+            }
+
+            if (strncmp(line, "Price:", 6) == 0)
+            {
+                sscanf(line, "Price: %f", &local_item->price);
+            }
+            else if (strncmp(line, "Score:", 6) == 0)
+            {
+                sscanf(line, "Score: %f", &local_item->score);
+            }
+            else if (strncmp(line, "Entity:", 7) == 0)
+            {
+                sscanf(line, "Entity: %d", &local_item->entity);
+            }
         }
 
         sscanf(file_path, "Dataset/Store%c/", &local_item->store_number); // Extract store number
@@ -382,6 +397,7 @@ pid_t create_process(const char *path)
                 price_threshold -= buffer.price * buffer.number;
             }
 
+            buffer.entity -= buffer.number;
             results[results_count] = buffer;
             results_count++;
         }
@@ -452,10 +468,9 @@ void *score(void *arg)
     pthread_t thread_id = pthread_self(); // Get the thread ID
     printf("PID %d create thread for Scores TID: %lu \n", main_pid, (unsigned long)thread_id);
 
-    float item_scores[100];
-    int item_scores_count = 0;
+    float item_score;
 
-    // Get score
+    // Get score & time
     printf("Enter score in range [0, 5] for:\n");
     for (int i = 0; i < count; i++)
     {
@@ -466,19 +481,50 @@ void *score(void *arg)
             continue;
         }
 
+        // Get score
         printf("%s: ", cart[i].name);
         fgets(input, sizeof(input), stdin);
         input[strcspn(input, "\n")] = 0;
-        sscanf(input, "%f", &item_scores[item_scores_count]);
+        sscanf(input, "%f", &item_score);
 
-        if (item_scores[item_scores_count] < 0.0 || item_scores[item_scores_count] > 5.0)
+        if (item_score < 0.0 || item_score > 5.0)
         {
             printf("The score entered is not valid !\n");
             i--;
             continue;
         }
+        cart[i].score = (cart[i].score + item_score) / 2;
 
-        item_scores_count++;
+        // Get time (last modified)
+        time_t now;
+        struct tm *tm_info;
+
+        time(&now);
+        tm_info = localtime(&now);
+
+        strftime(cart[i].last_modified, sizeof(cart[i].last_modified), "%Y-%m-%d %H:%M:%S", tm_info);
+    }
+
+    for (int i = 0; i < count; i++)
+    {
+        if (cart[i].store_number == chosen_store[0])
+        {
+            // Open file for update product information
+            FILE *file = fopen(cart[i].path, "w");
+            if (file == NULL)
+            {
+                perror("Unable to open file!");
+                return NULL;
+            }
+
+            fprintf(file, "Name: %s\n", cart[i].name);
+            fprintf(file, "Price: %.2f\n", cart[i].price);
+            fprintf(file, "Score: %.1f\n", cart[i].score);
+            fprintf(file, "Entity: %d\n", cart[i].entity);
+            fprintf(file, "\n");
+            fprintf(file, "Last Modified: %s\n", cart[i].last_modified);
+            fclose(file);
+        }
     }
 
     return NULL;
@@ -551,7 +597,7 @@ void * final(void *arg)
         return NULL;
     }
 
-    // Write information to file
+    // Write information to user file
     fprintf(file, "Username: %s\n", username);
     fprintf(file, "Number of times purchased from the Store1: %d\n", store_count[0]);
     fprintf(file, "Number of times purchased from the Store2: %d\n", store_count[1]);
