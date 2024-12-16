@@ -16,9 +16,7 @@ void login()
     char file_path[200];
     snprintf(file_path, sizeof(file_path), "Users/%s.txt", username);
 
-    // Checking for the existence of the user file
     FILE *file = fopen(file_path, "r");
-
     if (file) // User file exists
     {
         // Calculate the number of previous purchases made by the user
@@ -48,7 +46,7 @@ void login()
 
         order_number = store_count[0] + store_count[1] + store_count[2];
     }
-    else // User file not exists
+    else // User file doesn't exists
     {
         // Create user file
         file = fopen(file_path, "w");
@@ -69,15 +67,13 @@ int main()
         login();
 
         // Write username in users file
-        FILE *file = fopen("users.txt", "w");
+        FILE *file = fopen("Users.txt", "w");
         fprintf(file, "%s\n", username);
         fclose(file);
 
         // Open a new terminal window & transfer the order number
         char command[100];
-        snprintf(command, sizeof(command),
-                 "gnome-terminal -- bash -c 'gcc client.c -o client && ./client %d; exec bash'",
-                 order_number);
+        snprintf(command, sizeof(command), "gnome-terminal -- bash -c 'gcc client.c -o client && ./client %d; exec bash'", order_number);
         system(command);
     }
 
