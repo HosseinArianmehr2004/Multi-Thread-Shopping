@@ -3,7 +3,7 @@
 #include <string.h>
 
 char username[100];
-int order_number;
+int order_number = 0;
 
 void login()
 {

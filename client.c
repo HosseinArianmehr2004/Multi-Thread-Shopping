@@ -722,7 +722,7 @@ int main(int argc, char *argv[])
         for (int i = 0; i < all.count; i++)
         {
             printf("Store %c : %s: Price = %.2f, Score = %.1f, Entity = %d, Number = %d\n",
-                   all.cart[i].store_number, all.cart[i].name, all.cart[i].price, all.cart[i].score, all.cart[i].entity, all.cart[i].number);
+                   all.cart[i].store_number, all.cart[i].name, all.cart[i].price, all.cart[i].score, all.cart[i].entity + all.cart[i].number, all.cart[i].number);
         }
 
         pthread_t orders_th, scores_th, final_th;
