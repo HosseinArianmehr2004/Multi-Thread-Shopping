@@ -1,6 +1,6 @@
 Name: Jeans
 Price: 270.96
-Score: 4.5
-Entity: 52
+Score: 3.8
+Entity: 50
 
-Last Modified: 2024-11-23 18:50:11
+Last Modified: 2024-12-17 04:15:00

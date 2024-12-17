@@ -1,6 +1,6 @@
 Name: Hat
 Price: 101.04
-Score: 2.5
-Entity: 6
+Score: 1.8
+Entity: 5
 
-Last Modified: 2024-12-17 03:49:27
+Last Modified: 2024-12-17 04:17:25

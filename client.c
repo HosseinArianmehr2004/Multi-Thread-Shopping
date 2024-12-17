@@ -444,6 +444,28 @@ void *order(void *arg)
     return NULL;
 }
 
+void *update_files(void *arg)
+{
+    item *local_item = (item *)arg;
+
+    FILE *file = fopen(local_item->path, "w");
+    if (file == NULL)
+    {
+        perror("Unable to open file!");
+        return NULL;
+    }
+
+    fprintf(file, "Name: %s\n", local_item->name);
+    fprintf(file, "Price: %.2f\n", local_item->price);
+    fprintf(file, "Score: %.1f\n", local_item->score);
+    fprintf(file, "Entity: %d\n", local_item->entity);
+    fprintf(file, "\n");
+    fprintf(file, "Last Modified: %s\n", local_item->last_modified);
+
+    fclose(file);
+    return NULL;
+}
+
 void *score(void *arg)
 {
     shop_cart *data = (shop_cart *)arg;
@@ -494,26 +516,22 @@ void *score(void *arg)
         strftime(cart[i].last_modified, sizeof(cart[i].last_modified), "%Y-%m-%d %H:%M:%S", tm_info);
     }
 
+    // Create thread for updating files
+    pthread_t threads[count];
+    int thread_count = 0;
+
     for (int i = 0; i < count; i++)
     {
         if (cart[i].store_number == chosen_store[0])
         {
-            // Open file for update product information
-            FILE *file = fopen(cart[i].path, "w");
-            if (file == NULL)
-            {
-                perror("Unable to open file!");
-                return NULL;
-            }
-
-            fprintf(file, "Name: %s\n", cart[i].name);
-            fprintf(file, "Price: %.2f\n", cart[i].price);
-            fprintf(file, "Score: %.1f\n", cart[i].score);
-            fprintf(file, "Entity: %d\n", cart[i].entity);
-            fprintf(file, "\n");
-            fprintf(file, "Last Modified: %s\n", cart[i].last_modified);
-            fclose(file);
+            pthread_create(&threads[thread_count], NULL, update_files, (void *)&cart[i]);
+            thread_count++;
         }
+    }
+
+    for (int i = 0; i < thread_count; i++)
+    {
+        pthread_join(threads[i], NULL);
     }
 
     return NULL;

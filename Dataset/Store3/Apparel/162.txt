@@ -1,6 +1,6 @@
 Name: T-shirt
 Price: 784.22
-Score: 2.2
-Entity: 9
+Score: 1.6
+Entity: 8
 
-Last Modified: 2024-11-23 18:50:00
+Last Modified: 2024-12-17 04:21:41
