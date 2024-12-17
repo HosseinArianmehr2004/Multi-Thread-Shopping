@@ -57,10 +57,6 @@ item results[100];
 int results_count = 0;
 pthread_mutex_t results_array_mutex; // to put the items in the results correctly
 
-pthread_t threads[100];
-int thread_count = 0;
-pthread_mutex_t threads_done_reading_mutex;
-
 void get_order_list()
 {
     printf("Orderlist%d:\n", order_number);
@@ -205,10 +201,6 @@ void *read_file(void *arg)
         pthread_mutex_unlock(&results_array_mutex);
     }
 
-    pthread_mutex_lock(&threads_done_reading_mutex);
-    thread_count--;
-    pthread_mutex_unlock(&threads_done_reading_mutex);
-
     fclose(file);
     free(file_path);
     free(local_item);
@@ -258,6 +250,9 @@ void create_thread(const char *path)
         return;
     }
 
+    pthread_t threads[100];
+    int thread_count = 0;
+
     // Read all the category entries(folders & files)
     while ((entry = readdir(dp)) != NULL)
     {
@@ -291,21 +286,14 @@ void create_thread(const char *path)
 
             // printf("PID %d create thread for %sID TID: %lu \n", getpid(), product_ID, (unsigned long)threads[thread_count]);
 
-            pthread_mutex_lock(&threads_done_reading_mutex);
             thread_count++;
-            pthread_mutex_unlock(&threads_done_reading_mutex);
         }
     }
 
-    while (thread_count != 0)
-        ; // waits while all threads finish their reading
-
-    // sleep(1); // Sleep for 2 seconds before waking up threads
-
-    // for (int i = 0; i < thread_count; i++)
-    // {
-    //     pthread_join(threads[i], NULL);
-    // }
+    for (int i = 0; i < thread_count; i++)
+    {
+        pthread_join(threads[i], NULL);
+    }
 
     closedir(dp);
 }
@@ -353,14 +341,12 @@ pid_t create_process(const char *path)
 
         pthread_mutex_init(&results_array_mutex, NULL);
         pthread_mutex_init(&log_file_mutex, NULL);
-        pthread_mutex_init(&threads_done_reading_mutex, NULL);
 
         create_log_file(full_path);
         create_thread(full_path);
 
         pthread_mutex_destroy(&results_array_mutex);
         pthread_mutex_destroy(&log_file_mutex);
-        pthread_mutex_destroy(&threads_done_reading_mutex);
 
         // Send the results array through pipe
         close(pipe_fd[0]); // Close the read end
@@ -375,6 +361,9 @@ pid_t create_process(const char *path)
     }
     else // Parent
     {
+        while (wait(NULL) != -1 || errno != ECHILD)
+            ; // waits until all the children terminate
+
         item buffer;
 
         // Calculating the number of allowed purchases for each product
@@ -694,9 +683,14 @@ int main(int argc, char *argv[])
             write(pipe_fd[1], results, sizeof(item) * results_count);
             close(pipe_fd[1]); // Close write end
         }
+
+        exit(0);
     }
     else // Parent process
     {
+        while (wait(NULL) != -1 || errno != ECHILD)
+            ; // waits until all the children terminate
+
         shop_cart all;
         all.count = 0;
 
@@ -721,9 +715,6 @@ int main(int argc, char *argv[])
         pthread_join(orders_th, NULL);
         pthread_join(scores_th, NULL);
         pthread_join(final_th, NULL);
-
-        while (wait(NULL) != -1 || errno != ECHILD)
-            ; // waits until all the children terminate
     }
 
     return 0;
