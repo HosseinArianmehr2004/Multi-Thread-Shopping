@@ -1,3 +1,3 @@
 cd /home/michael/Desktop/Multi-Thread-Shopping
-gcc server.c -o server
+gcc `pkg-config --cflags gtk+-3.0` -o server server.c `pkg-config --libs gtk+-3.0`
 ./server
